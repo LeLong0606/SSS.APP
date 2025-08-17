@@ -1,0 +1,77 @@
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-header">
+      <h1>Đăng nhập</h1>
+      <p>Chào mừng trở lại! Vui lòng đăng nhập vào tài khoản của bạn.</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="auth-form">
+      <!-- Email Field -->
+      <div class="form-field">
+        <label for="email">Email</label>
+        <input
+          type="email"
+          id="email"
+          formControlName="email"
+          placeholder="Nhập email của bạn"
+          [class.error]="isFieldInvalid('email')"
+        />
+        <div class="error-message" *ngIf="isFieldInvalid('email')">
+          {{ getFieldError('email') }}
+        </div>
+      </div>
+
+      <!-- Password Field -->
+      <div class="form-field">
+        <label for="password">Mật khẩu</label>
+        <div class="password-input">
+          <input
+            [type]="hidePassword ? 'password' : 'text'"
+            id="password"
+            formControlName="password"
+            placeholder="Nhập mật khẩu"
+            [class.error]="isFieldInvalid('password')"
+          />
+          <button
+            type="button"
+            class="password-toggle"
+            (click)="togglePasswordVisibility()"
+          >
+            <span>{{ hidePassword ? '👁️' : '🙈' }}</span>
+          </button>
+        </div>
+        <div class="error-message" *ngIf="isFieldInvalid('password')">
+          {{ getFieldError('password') }}
+        </div>
+      </div>
+
+      <!-- Remember Me -->
+      <div class="form-field checkbox-field">
+        <label class="checkbox-label">
+          <input type="checkbox" formControlName="rememberMe" />
+          <span class="checkmark"></span>
+          Ghi nhớ đăng nhập
+        </label>
+      </div>
+
+      <!-- Submit Button -->
+      <button
+        type="submit"
+        class="btn btn-primary"
+        [disabled]="loginForm.invalid || isLoading"
+      >
+        <span *ngIf="!isLoading">Đăng nhập</span>
+        <span *ngIf="isLoading" class="loading-text">
+          <span class="spinner"></span>
+          Đang đăng nhập...
+        </span>
+      </button>
+
+      <!-- Links -->
+      <div class="auth-links">
+        <a routerLink="/auth/register">Chưa có tài khoản? Đăng ký ngay</a>
+        <a href="#" class="forgot-password">Quên mật khẩu?</a>
+      </div>
+    </form>
+  </div>
+</div>

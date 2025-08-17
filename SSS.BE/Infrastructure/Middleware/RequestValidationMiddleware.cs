@@ -124,7 +124,8 @@ public class RequestValidationMiddleware
         foreach (var header in request.Headers)
         {
             var headerName = header.Key;
-            var headerValue = string.Join(",", header.Value);
+            var headerValues = header.Value.Where(v => v != null).ToArray();
+            var headerValue = string.Join(",", headerValues);
 
             // Check for malicious patterns in header values
             if (ContainsMaliciousPattern(headerValue))
@@ -185,7 +186,8 @@ public class RequestValidationMiddleware
         foreach (var param in request.Query)
         {
             var paramName = param.Key;
-            var paramValue = string.Join(",", param.Value);
+            var paramValues = param.Value.Where(v => v != null).ToArray();
+            var paramValue = string.Join(",", paramValues);
 
             // Check for malicious patterns
             if (ContainsMaliciousPattern(paramName) || ContainsMaliciousPattern(paramValue))

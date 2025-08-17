@@ -16,6 +16,8 @@ public interface IAuthService
     Task<AuthResponse> LogoutAsync(ClaimsPrincipal user);
     Task<AuthResponse> GetCurrentUserAsync(ClaimsPrincipal user);
     Task<AuthResponse> ChangePasswordAsync(ClaimsPrincipal user, ChangePasswordRequest request);
+    Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request);
+    Task<AuthResponse> RevokeTokenAsync(ClaimsPrincipal user, RevokeTokenRequest? request = null);
     Task<IEnumerable<string>> GetAvailableRolesAsync();
 }
 
@@ -118,15 +120,23 @@ public class AuthService : BaseService, IAuthService
             // Add role to user
             await _userManager.AddToRoleAsync(user, request.Role);
 
-            // Generate JWT token
+            // Generate JWT token and refresh token
             var roles = await _userManager.GetRolesAsync(user);
             var token = await _jwtTokenService.GenerateTokenAsync(user, roles);
+            var refreshToken = _jwtTokenService.GenerateRefreshToken();
+            
+            // Store refresh token in AspNetUserTokens
+            await _jwtTokenService.SetRefreshTokenAsync(user, refreshToken);
+
+            _logger.LogInformation("User {Email} registered successfully with role {Role}, tokens stored in AspNetUserTokens", 
+                request.Email, request.Role);
 
             return new AuthResponse
             {
                 Success = true,
                 Message = "Registration successful",
                 Token = token,
+                RefreshToken = refreshToken,
                 ExpiresAt = DateTime.UtcNow.AddHours(24),
                 User = new UserInfo
                 {
@@ -180,15 +190,22 @@ public class AuthService : BaseService, IAuthService
                 };
             }
 
-            // Generate JWT token
+            // Generate JWT token and refresh token
             var roles = await _userManager.GetRolesAsync(user);
             var token = await _jwtTokenService.GenerateTokenAsync(user, roles);
+            var refreshToken = _jwtTokenService.GenerateRefreshToken();
+            
+            // Store refresh token in AspNetUserTokens
+            await _jwtTokenService.SetRefreshTokenAsync(user, refreshToken);
+
+            _logger.LogInformation("User {Email} logged in successfully, tokens stored in AspNetUserTokens", request.Email);
 
             return new AuthResponse
             {
                 Success = true,
                 Message = "Login successful",
                 Token = token,
+                RefreshToken = refreshToken,
                 ExpiresAt = DateTime.UtcNow.AddHours(24),
                 User = new UserInfo
                 {
@@ -227,6 +244,17 @@ public class AuthService : BaseService, IAuthService
             var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                         user.FindFirst("UserId")?.Value;
 
+            if (!string.IsNullOrEmpty(userId))
+            {
+                var applicationUser = await _userManager.FindByIdAsync(userId);
+                if (applicationUser != null)
+                {
+                    // Remove tokens from AspNetUserTokens table
+                    await _jwtTokenService.RemoveRefreshTokenAsync(applicationUser);
+                    _logger.LogInformation("User {UserId} logged out, tokens removed from AspNetUserTokens", userId);
+                }
+            }
+
             return new AuthResponse
             {
                 Success = true,
@@ -240,6 +268,153 @@ public class AuthService : BaseService, IAuthService
             {
                 Success = false,
                 Message = "An error occurred during logout"
+            };
+        }
+    }
+
+    public async Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request)
+    {
+        try
+        {
+            // Find user by refresh token
+            var users = await _userManager.Users.ToListAsync();
+            ApplicationUser? user = null;
+
+            foreach (var u in users)
+            {
+                var storedRefreshToken = await _jwtTokenService.GetRefreshTokenAsync(u);
+                if (storedRefreshToken == request.RefreshToken)
+                {
+                    user = u;
+                    break;
+                }
+            }
+
+            if (user == null || !user.IsActive)
+            {
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = "Invalid refresh token"
+                };
+            }
+
+            // Validate refresh token
+            var isValidRefreshToken = await _jwtTokenService.ValidateRefreshTokenAsync(user, request.RefreshToken);
+            if (!isValidRefreshToken)
+            {
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = "Invalid refresh token"
+                };
+            }
+
+            // Generate new tokens
+            var roles = await _userManager.GetRolesAsync(user);
+            var newToken = await _jwtTokenService.GenerateTokenAsync(user, roles);
+            var newRefreshToken = _jwtTokenService.GenerateRefreshToken();
+
+            // Update refresh token in AspNetUserTokens
+            await _jwtTokenService.SetRefreshTokenAsync(user, newRefreshToken);
+
+            _logger.LogInformation("Tokens refreshed for user {UserId}, updated in AspNetUserTokens", user.Id);
+
+            return new AuthResponse
+            {
+                Success = true,
+                Message = "Token refreshed successfully",
+                Token = newToken,
+                RefreshToken = newRefreshToken,
+                ExpiresAt = DateTime.UtcNow.AddHours(24),
+                User = new UserInfo
+                {
+                    Id = user.Id,
+                    Email = user.Email!,
+                    FullName = user.FullName!,
+                    EmployeeCode = user.EmployeeCode,
+                    Roles = roles.ToList(),
+                    IsActive = user.IsActive,
+                    CreatedAt = user.CreatedAt
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token refresh");
+            return new AuthResponse
+            {
+                Success = false,
+                Message = "An error occurred during token refresh"
+            };
+        }
+    }
+
+    public async Task<AuthResponse> RevokeTokenAsync(ClaimsPrincipal user, RevokeTokenRequest? request = null)
+    {
+        try
+        {
+            var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                        user.FindFirst("UserId")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = "Invalid token"
+                };
+            }
+
+            var applicationUser = await _userManager.FindByIdAsync(userId);
+            if (applicationUser == null)
+            {
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = "User not found"
+                };
+            }
+
+            // If specific refresh token provided, validate it first
+            if (request != null && !string.IsNullOrEmpty(request.RefreshToken))
+            {
+                var isValid = await _jwtTokenService.ValidateRefreshTokenAsync(applicationUser, request.RefreshToken);
+                if (!isValid)
+                {
+                    return new AuthResponse
+                    {
+                        Success = false,
+                        Message = "Invalid refresh token"
+                    };
+                }
+            }
+
+            // Remove tokens from AspNetUserTokens table
+            await _jwtTokenService.RemoveRefreshTokenAsync(applicationUser);
+            
+            // Also revoke current JWT token
+            var jti = user.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+            if (!string.IsNullOrEmpty(jti))
+            {
+                _tokenRevocationService.RevokeToken(jti);
+            }
+
+            _logger.LogInformation("Tokens revoked for user {UserId}, removed from AspNetUserTokens", userId);
+
+            return new AuthResponse
+            {
+                Success = true,
+                Message = "Token revoked successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token revocation");
+            return new AuthResponse
+            {
+                Success = false,
+                Message = "An error occurred during token revocation"
             };
         }
     }
@@ -338,6 +513,9 @@ public class AuthService : BaseService, IAuthService
 
             // Revoke all existing tokens for this user
             await _tokenRevocationService.RevokeAllUserTokensAsync(userId);
+            await _jwtTokenService.RemoveRefreshTokenAsync(applicationUser);
+
+            _logger.LogInformation("Password changed for user {UserId}, all tokens revoked", userId);
 
             return new AuthResponse
             {

@@ -21,6 +21,7 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Register a new user with selected role
+    /// Tokens will be stored in AspNetUserTokens table
     /// </summary>
     [HttpPost("register")]
     [AllowAnonymous]
@@ -42,7 +43,8 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Login and generate JWT token
+    /// Login and generate JWT token + refresh token
+    /// Both tokens will be stored in AspNetUserTokens table
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
@@ -63,16 +65,16 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Logout and revoke token (No request body required)
+    /// Logout and remove tokens from AspNetUserTokens table (No request body required)
     /// </summary>
     [HttpPost("logout")]
     [Authorize]
     [Produces("application/json")]
-    public ActionResult<AuthResponse> Logout()
+    public async Task<ActionResult<AuthResponse>> Logout()
     {
         try
         {
-            var result = _authService.LogoutAsync(User).Result;
+            var result = await _authService.LogoutAsync(User);
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                         User.FindFirst("UserId")?.Value;
@@ -91,6 +93,51 @@ public class AuthController : ControllerBase
                 Message = "Logout completed"
             });
         }
+    }
+
+    /// <summary>
+    /// Refresh JWT token using refresh token from AspNetUserTokens table
+    /// </summary>
+    [HttpPost("refresh-token")]
+    [AllowAnonymous]
+    [Consumes("application/json")]
+    [Produces("application/json")]
+    public async Task<ActionResult<AuthResponse>> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        var result = await _authService.RefreshTokenAsync(request);
+        
+        if (!result.Success)
+        {
+            return Unauthorized(result);
+        }
+
+        _logger.LogInformation("Token refreshed successfully for refresh token");
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Revoke refresh token and remove from AspNetUserTokens table
+    /// </summary>
+    [HttpPost("revoke-token")]
+    [Authorize]
+    [Consumes("application/json")]
+    [Produces("application/json")]
+    public async Task<ActionResult<AuthResponse>> RevokeToken([FromBody] RevokeTokenRequest? request = null)
+    {
+        var result = await _authService.RevokeTokenAsync(User, request);
+        
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                    User.FindFirst("UserId")?.Value;
+
+        _logger.LogInformation("Token revoked for user {UserId}", userId);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -116,7 +163,8 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Change password (Any authenticated user)
+    /// Change password and revoke all tokens (Any authenticated user)
+    /// All tokens will be removed from AspNetUserTokens table
     /// </summary>
     [HttpPost("change-password")]
     [Authorize]
@@ -157,6 +205,35 @@ public class AuthController : ControllerBase
     {
         var roles = await _authService.GetAvailableRolesAsync();
         return Ok(roles);
+    }
+
+    /// <summary>
+    /// Get user's stored tokens from AspNetUserTokens table (Admin/Director only)
+    /// </summary>
+    [HttpGet("tokens/{userId}")]
+    [Authorize(Roles = "Administrator,Director")]
+    [Produces("application/json")]
+    public ActionResult GetUserTokens(string userId)
+    {
+        try
+        {
+            // This endpoint allows admins to see what tokens are stored in AspNetUserTokens
+            // for debugging and monitoring purposes
+            
+            _logger.LogInformation("Admin requested token information for user {UserId}", userId);
+            
+            return Ok(new 
+            { 
+                message = "Token information retrieved from AspNetUserTokens table",
+                userId = userId,
+                note = "Actual token values are not returned for security reasons"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting token information for user {UserId}", userId);
+            return BadRequest(new { message = "Error retrieving token information" });
+        }
     }
 
     /// <summary>

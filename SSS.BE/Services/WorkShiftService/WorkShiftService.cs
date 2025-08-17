@@ -196,7 +196,7 @@ public class WorkShiftService : BaseService, IWorkShiftService
                 })
                 .ToListAsync();
 
-            return new WeeklyShiftsDto
+            var result = new WeeklyShiftsDto
             {
                 EmployeeCode = employeeCode,
                 EmployeeName = employee.FullName,
@@ -205,6 +205,8 @@ public class WorkShiftService : BaseService, IWorkShiftService
                 TotalWeeklyHours = shifts.Sum(s => s.TotalHours),
                 DailyShifts = shifts
             };
+
+            return result;
         }, "Get weekly shifts");
     }
 

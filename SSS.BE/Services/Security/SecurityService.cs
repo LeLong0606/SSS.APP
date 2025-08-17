@@ -415,9 +415,9 @@ public class SecurityService : IAntiSpamService, IDuplicatePreventionService, IA
         }
     }
 
-    public async Task MarkSuspiciousActivityAsync(string userId, string ipAddress, string reason)
+    public Task MarkSuspiciousActivityAsync(string userId, string ipAddress, string reason)
     {
-        await LogActionAsync("SECURITY", $"{userId}:{ipAddress}", "SUSPICIOUS_ACTIVITY", 
+        return LogActionAsync("SECURITY", $"{userId}:{ipAddress}", "SUSPICIOUS_ACTIVITY", 
             userId, null, ipAddress, null, new { Reason = reason }, reason);
     }
 

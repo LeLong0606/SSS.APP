@@ -145,15 +145,15 @@ public class PerformanceMonitoringMiddleware
     {
         if (!context.Response.HasStarted)
         {
-            context.Response.Headers.Add("X-Response-Time", $"{elapsedMs}ms");
-            context.Response.Headers.Add("X-Server-Time", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            context.Response.Headers["X-Response-Time"] = $"{elapsedMs}ms";
+            context.Response.Headers["X-Server-Time"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
             
             var memoryMB = GC.GetTotalMemory(false) / 1024 / 1024;
-            context.Response.Headers.Add("X-Memory-Usage", $"{memoryMB}MB");
+            context.Response.Headers["X-Memory-Usage"] = $"{memoryMB}MB";
         }
     }
 
-    private async Task PeriodicMaintenanceAsync(IServiceProvider serviceProvider)
+    private Task PeriodicMaintenanceAsync(IServiceProvider serviceProvider)
     {
         var now = DateTime.UtcNow;
         
@@ -187,6 +187,8 @@ public class PerformanceMonitoringMiddleware
                     memoryUsage / 1024 / 1024, afterGC / 1024 / 1024);
             }
         }
+        
+        return Task.CompletedTask;
     }
 
     private void CleanupOldMetrics(DateTime now)

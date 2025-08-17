@@ -133,12 +133,21 @@ builder.Services.AddEndpointsApiExplorer();
 // ===== Swagger with JWT Authentication =====
 builder.Services.AddSwaggerWithJwtAuth();
 
-// CORS
+// CORS - Updated for Frontend Integration
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", builder =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        builder.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:50503", "https://localhost:50503") // Angular frontend ports
+               .AllowAnyMethod()
+               .AllowAnyHeader()
+               .AllowCredentials();
+    });
+    
+    // Keep AllowAll for development but use AllowFrontend in production
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
                .AllowAnyMethod()
                .AllowAnyHeader();
     });
@@ -169,7 +178,7 @@ using (var scope = app.Services.CreateScope())
 app.UseSwaggerDefault();
 
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseCors("AllowFrontend"); // Use specific policy instead of AllowAll
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -252,8 +261,6 @@ app.MapPost("/admin/optimize-database", async (IDatabaseOptimizationService dbSe
     return Results.Ok(new { Message = "Database optimization completed", Timestamp = DateTime.UtcNow });
 }).WithTags("Admin")
   .RequireAuthorization("Administrator");
-
-app.Run();
 
 // ===== Background Service for Database Maintenance =====
 public class DatabaseMaintenanceService : BackgroundService

@@ -42,6 +42,7 @@ public class AuthResponse
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
     public string? Token { get; set; }
+    public string? RefreshToken { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public UserInfo? User { get; set; }
     public List<string> Errors { get; set; } = new();
@@ -70,4 +71,15 @@ public class ChangePasswordRequest
     [Required(ErrorMessage = "Password confirmation is required")]
     [Compare("NewPassword", ErrorMessage = "Passwords do not match")]
     public string ConfirmNewPassword { get; set; } = string.Empty;
+}
+
+public class RefreshTokenRequest
+{
+    [Required(ErrorMessage = "Refresh token is required")]
+    public string RefreshToken { get; set; } = string.Empty;
+}
+
+public class RevokeTokenRequest
+{
+    public string? RefreshToken { get; set; }
 }

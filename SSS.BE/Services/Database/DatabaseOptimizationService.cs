@@ -41,10 +41,10 @@ public class DatabaseOptimizationService : IDatabaseOptimizationService
                 try
                 {
                     // Rebuild indexes for better performance
-                    await _context.Database.ExecuteSqlRawAsync($"ALTER INDEX ALL ON [{table}] REBUILD");
+                    await _context.Database.ExecuteSqlAsync($"ALTER INDEX ALL ON [{table}] REBUILD");
                     
                     // Update table statistics
-                    await _context.Database.ExecuteSqlRawAsync($"UPDATE STATISTICS [{table}]");
+                    await _context.Database.ExecuteSqlAsync($"UPDATE STATISTICS [{table}]");
                     
                     _logger.LogInformation("Optimized indexes and statistics for table {TableName}", table);
                 }

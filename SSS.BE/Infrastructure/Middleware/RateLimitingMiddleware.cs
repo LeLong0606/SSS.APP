@@ -133,10 +133,10 @@ public class RateLimitingMiddleware
         response.ContentType = "application/json";
 
         // Add rate limit headers
-        response.Headers.Add("X-RateLimit-Limit", _options.MaxRequests.ToString());
-        response.Headers.Add("X-RateLimit-Remaining", "0");
-        response.Headers.Add("X-RateLimit-Reset", DateTimeOffset.UtcNow.Add(_options.TimeWindow).ToUnixTimeSeconds().ToString());
-        response.Headers.Add("Retry-After", ((int)_options.TimeWindow.TotalSeconds).ToString());
+        response.Headers["X-RateLimit-Limit"] = _options.MaxRequests.ToString();
+        response.Headers["X-RateLimit-Remaining"] = "0";
+        response.Headers["X-RateLimit-Reset"] = DateTimeOffset.UtcNow.Add(_options.TimeWindow).ToUnixTimeSeconds().ToString();
+        response.Headers["Retry-After"] = ((int)_options.TimeWindow.TotalSeconds).ToString();
 
         var errorResponse = new ApiResponse<object>
         {

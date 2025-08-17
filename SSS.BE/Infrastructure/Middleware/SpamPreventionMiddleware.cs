@@ -307,9 +307,9 @@ public class SpamPreventionMiddleware
         response.ContentType = "application/json";
 
         // Add security headers
-        response.Headers.Add("X-Rate-Limit-Exceeded", "true");
-        response.Headers.Add("X-Spam-Detected", "true");
-        response.Headers.Add("Retry-After", "300"); // 5 minutes
+        response.Headers["X-Rate-Limit-Exceeded"] = "true";
+        response.Headers["X-Spam-Detected"] = "true";
+        response.Headers["Retry-After"] = "300"; // 5 minutes
 
         var errorResponse = new ApiResponse<object>
         {

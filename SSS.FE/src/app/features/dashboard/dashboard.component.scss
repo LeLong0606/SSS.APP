@@ -1,0 +1,83 @@
+.dashboard-container {
+  padding: 2rem;
+}
+
+.dashboard-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  margin-bottom: 2rem;
+
+  h1 {
+    color: #333;
+    margin: 0 0 0.5rem;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+
+  p {
+    color: #666;
+    margin: 0;
+    font-size: 1.1rem;
+  }
+}
+
+.dashboard-cards {
+  display: grid;
+  gap: 1.5rem;
+  
+  .card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e0e0e0;
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+
+    &:hover {
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .card-header {
+      padding: 1.5rem 1.5rem 0;
+      border-bottom: 1px solid #f0f0f0;
+
+      h3 {
+        margin: 0 0 1rem;
+        color: #333;
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+    }
+
+    .card-content {
+      padding: 1.5rem;
+
+      p {
+        margin: 0;
+        color: #666;
+        line-height: 1.6;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-content {
+    padding: 0 1rem;
+  }
+
+  .dashboard-header {
+    margin-bottom: 1.5rem;
+
+    h1 {
+      font-size: 1.75rem;
+    }
+
+    p {
+      font-size: 1rem;
+    }
+  }
+}
