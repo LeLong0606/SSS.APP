@@ -1,21 +1,45 @@
-# ?? Start Full Stack SSS Application
-# Run this script to start both Backend and Frontend
+# SSS Employee Management System - Startup Script
+Write-Host "================================================" -ForegroundColor Cyan
+Write-Host "   ?? SSS Employee Management System - Startup" -ForegroundColor Yellow  
+Write-Host "================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Starting Backend (SSS.BE) on https://localhost:5001..." -ForegroundColor Green
+Write-Host "Starting Frontend (SSS.FE) on http://localhost:50503..." -ForegroundColor Green
+Write-Host ""
+Write-Host "? Backend API: https://localhost:5001/api" -ForegroundColor White
+Write-Host "? Frontend UI: http://localhost:50503" -ForegroundColor White
+Write-Host "? Swagger UI: https://localhost:5001/swagger" -ForegroundColor White
+Write-Host ""
+Write-Host "Press Ctrl+C in either window to stop the servers" -ForegroundColor Yellow
+Write-Host "================================================" -ForegroundColor Cyan
+Write-Host ""
 
-Write-Host "?? Starting SSS Employee Management System..." -ForegroundColor Green
-Write-Host "==========================================" -ForegroundColor Cyan
+# Start Backend in new PowerShell window
+$backendScript = @"
+Write-Host 'Starting SSS Backend...' -ForegroundColor Green
+Set-Location 'SSS.BE'
+dotnet run --urls=https://localhost:5001
+"@
 
-# Start Backend (SSS.BE)
-Write-Host "?? Starting Backend (SSS.BE) on https://localhost:5001..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '.\SSS.BE\'; dotnet run --urls 'https://localhost:5001;http://localhost:5000'"
+Start-Process PowerShell -ArgumentList "-NoExit", "-Command", $backendScript
 
-# Wait for backend to start
-Start-Sleep -Seconds 3
+# Wait a bit for backend to start
+Write-Host "? Waiting for backend to initialize..." -ForegroundColor Yellow
+Start-Sleep -Seconds 5
 
-# Start Frontend (SSS.FE)
-Write-Host "?? Starting Frontend (SSS.FE) on http://localhost:50503..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '.\SSS.FE\'; npm start"
+# Start Frontend in new PowerShell window
+$frontendScript = @"
+Write-Host 'Starting SSS Frontend...' -ForegroundColor Green  
+Set-Location 'SSS.FE'
+npm start
+"@
 
-Write-Host "? Both applications are starting..." -ForegroundColor Green
-Write-Host "?? Backend API: https://localhost:5001/swagger" -ForegroundColor Cyan
-Write-Host "?? Frontend App: http://localhost:50503" -ForegroundColor Cyan
-Write-Host "==========================================" -ForegroundColor Green
+Start-Process PowerShell -ArgumentList "-NoExit", "-Command", $frontendScript
+
+Write-Host ""
+Write-Host "? Both servers are starting..." -ForegroundColor Green
+Write-Host "?? Open browser: http://localhost:50503" -ForegroundColor Cyan
+Write-Host "?? API Documentation: https://localhost:5001/swagger" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Press any key to exit this launcher..." -ForegroundColor Yellow
+$host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null

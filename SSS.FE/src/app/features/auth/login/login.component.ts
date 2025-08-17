@@ -37,8 +37,7 @@ export class LoginComponent implements OnInit {
   private createLoginForm(): FormGroup {
     return this.fb.group({
       email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
-      rememberMe: [false]
+      password: ['', [Validators.required, Validators.minLength(6)]]
     });
   }
 
@@ -49,7 +48,11 @@ export class LoginComponent implements OnInit {
     }
 
     this.isLoading = true;
-    const loginData: LoginRequest = this.loginForm.value;
+    
+    const loginData: LoginRequest = {
+      email: this.loginForm.value.email,
+      password: this.loginForm.value.password
+    };
 
     this.authService.login(loginData)
       .pipe(finalize(() => this.isLoading = false))
@@ -58,6 +61,8 @@ export class LoginComponent implements OnInit {
           if (response.success) {
             this.notificationService.showSuccess('Đăng nhập thành công!');
             this.router.navigate([this.returnUrl]);
+          } else {
+            this.handleLoginError({ error: { message: response.message } });
           }
         },
         error: (error) => {
@@ -69,10 +74,24 @@ export class LoginComponent implements OnInit {
   private handleLoginError(error: any): void {
     let errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại.';
     
-    if (error.error && error.error.message) {
+    if (error.status === 0) {
+      errorMessage = 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.';
+    } else if (error.status === 400) {
+      if (error.error && error.error.errors && Array.isArray(error.error.errors)) {
+        // Handle backend validation errors array
+        errorMessage = error.error.errors.join(', ');
+      } else if (error.error && error.error.message) {
+        errorMessage = error.error.message;
+      } else if (error.error && typeof error.error === 'string') {
+        errorMessage = error.error;
+      } else {
+        errorMessage = 'Thông tin đăng nhập không hợp lệ. Vui lòng kiểm tra email và mật khẩu.';
+      }
+    } else if (error.error && error.error.message) {
       errorMessage = error.error.message;
     }
     
+    console.error('Login error:', error);
     this.notificationService.showError(errorMessage);
   }
 
@@ -109,5 +128,10 @@ export class LoginComponent implements OnInit {
 
   togglePasswordVisibility(): void {
     this.hidePassword = !this.hidePassword;
+  }
+
+  // Navigation to register
+  navigateToRegister(): void {
+    this.router.navigate(['/auth/register']);
   }
 }

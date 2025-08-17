@@ -1,0 +1,277 @@
+<!-- Work Shift List Component Template -->
+<div class="work-shift-list-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h2>Quản lý ca làm việc</h2>
+        <p class="subtitle">Tổng cộng {{ totalRecords }} ca làm việc</p>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary btn-sm"
+          (click)="refresh()"
+          [disabled]="isLoading"
+          title="Làm mới dữ liệu">
+          <i class="icon-refresh"></i>
+          Làm mới
+        </button>
+        <button 
+          class="btn btn-success btn-sm"
+          (click)="createWeeklyShifts()"
+          *ngIf="canCreate"
+          title="Tạo ca theo tuần">
+          <i class="icon-calendar"></i>
+          Ca theo tuần
+        </button>
+        <button 
+          class="btn btn-primary" 
+          (click)="createWorkShift()"
+          *ngIf="canCreate">
+          <i class="icon-plus"></i>
+          Thêm ca làm việc
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters and Search -->
+  <div class="filters-section">
+    <div class="filters-row">
+      <!-- Search -->
+      <div class="filter-group search-group">
+        <label>Tìm kiếm</label>
+        <div class="search-box">
+          <input 
+            type="text" 
+            placeholder="Tìm theo nhân viên, ghi chú..."
+            [value]="searchTerm"
+            (input)="onSearchChange($event)"
+            class="form-control"
+            [disabled]="isLoading">
+          <i class="icon-search"></i>
+        </div>
+      </div>
+
+      <!-- Date Range -->
+      <div class="filter-group">
+        <label>Từ ngày</label>
+        <input 
+          type="date" 
+          class="form-control"
+          [(ngModel)]="startDate"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+      </div>
+      
+      <div class="filter-group">
+        <label>Đến ngày</label>
+        <input 
+          type="date" 
+          class="form-control"
+          [(ngModel)]="endDate"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+      </div>
+
+      <!-- Employee Filter -->
+      <div class="filter-group">
+        <label>Nhân viên</label>
+        <select 
+          class="form-control"
+          [(ngModel)]="selectedEmployee"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+          <option value="">Tất cả nhân viên</option>
+          <option 
+            *ngFor="let emp of employees" 
+            [value]="emp.employeeCode">
+            {{ emp.fullName }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Location Filter -->
+      <div class="filter-group">
+        <label>Địa điểm</label>
+        <select 
+          class="form-control"
+          [(ngModel)]="selectedLocation"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+          <option value="">Tất cả địa điểm</option>
+          <option 
+            *ngFor="let location of workLocations" 
+            [value]="location.id">
+            {{ location.name }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Shift Type Filter -->
+      <div class="filter-group">
+        <label>Loại ca</label>
+        <select 
+          class="form-control"
+          [(ngModel)]="selectedShiftType"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+          <option 
+            *ngFor="let option of shiftTypeOptions" 
+            [value]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Quick Date Filters -->
+    <div class="quick-filters" style="margin-top: 15px;">
+      <button class="btn btn-outline btn-sm" (click)="setToday()" [disabled]="isLoading">Hôm nay</button>
+      <button class="btn btn-outline btn-sm" (click)="setThisWeek()" [disabled]="isLoading">Tuần này</button>
+      <button class="btn btn-outline btn-sm" (click)="setThisMonth()" [disabled]="isLoading">Tháng này</button>
+      <button class="btn btn-outline btn-sm" (click)="clearDateFilters()" [disabled]="isLoading">Xóa bộ lọc</button>
+      <button class="btn btn-info btn-sm" (click)="exportShifts()" *ngIf="canManageAll" [disabled]="isLoading">
+        <i class="icon-download"></i>
+        Xuất Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Đang tải danh sách ca làm việc...</p>
+  </div>
+
+  <!-- Work Shifts Table -->
+  <div class="table-container" *ngIf="!isLoading">
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Ngày</th>
+            <th>Nhân viên</th>
+            <th>Loại ca</th>
+            <th>Thời gian</th>
+            <th>Thời lượng</th>
+            <th>Địa điểm</th>
+            <th>Trạng thái</th>
+            <th>Ghi chú</th>
+            <th class="actions-col">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let shift of workShifts; trackBy: trackByShiftId" class="table-row">
+            <td>{{ formatDate(shift.shiftDate) }}</td>
+            <td>
+              <strong>{{ getEmployeeName(shift.employeeCode) }}</strong>
+              <br>
+              <small class="text-muted">{{ shift.employeeCode }}</small>
+            </td>
+            <td>{{ getShiftTypeText(shift.shiftType) }}</td>
+            <td>
+              {{ formatTime(shift.startTime) }} - {{ formatTime(shift.endTime) }}
+            </td>
+            <td>{{ calculateDuration(shift.startTime, shift.endTime) }}</td>
+            <td>{{ getLocationName(shift.workLocationId) }}</td>
+            <td>
+              <span 
+                class="status-badge"
+                [class]="getShiftStatusClass(shift)">
+                {{ isUpcomingShift(shift) ? 'Sắp tới' : isPastShift(shift) ? 'Đã qua' : 'Hôm nay' }}
+              </span>
+            </td>
+            <td>{{ shift.notes || '-' }}</td>
+            <td class="actions">
+              <div class="btn-group">
+                <button 
+                  class="btn btn-sm btn-info"
+                  (click)="viewWorkShift(shift)"
+                  title="Xem chi tiết">
+                  <i class="icon-eye"></i>
+                </button>
+                <button 
+                  class="btn btn-sm btn-primary"
+                  (click)="editWorkShift(shift)"
+                  *ngIf="canEdit"
+                  title="Chỉnh sửa">
+                  <i class="icon-edit"></i>
+                </button>
+                <button 
+                  class="btn btn-sm btn-danger"
+                  (click)="deleteWorkShift(shift)"
+                  *ngIf="canDelete"
+                  title="Xóa">
+                  <i class="icon-delete"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="workShifts.length === 0 && !isLoading">
+      <div class="empty-content">
+        <i class="icon-calendar"></i>
+        <h3>Không có ca làm việc</h3>
+        <p>Không tìm thấy ca làm việc nào phù hợp với tiêu chí tìm kiếm.</p>
+        <button 
+          class="btn btn-primary"
+          (click)="createWorkShift()"
+          *ngIf="canCreate">
+          <i class="icon-plus"></i>
+          Thêm ca làm việc đầu tiên
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination-container" *ngIf="totalPages > 1 && !isLoading">
+    <div class="pagination-info">
+      <span>Trang {{ currentPage }} / {{ totalPages }}</span>
+      <div class="page-size-selector">
+        <label>Hiển thị:</label>
+        <select 
+          class="form-control form-control-sm"
+          [(ngModel)]="pageSize"
+          (change)="onPageSizeChange(pageSize)">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span>mục/trang</span>
+      </div>
+    </div>
+    
+    <nav class="pagination">
+      <!-- Previous Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === 1"
+        (click)="onPageChange(currentPage - 1)"
+        title="Trang trước">
+        Trước
+      </button>
+      
+      <!-- Page Numbers -->
+      <span class="page-info">
+        Trang {{ currentPage }} / {{ totalPages }}
+        ({{ totalRecords }} ca làm việc)
+      </span>
+      
+      <!-- Next Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === totalPages"
+        (click)="onPageChange(currentPage + 1)"
+        title="Trang sau">
+        Sau
+      </button>
+    </nav>
+  </div>
+</div>

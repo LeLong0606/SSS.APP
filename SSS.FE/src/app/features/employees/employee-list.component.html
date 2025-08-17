@@ -1,0 +1,298 @@
+<!-- Employee List Component Template -->
+<div class="employee-list-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h2>Quản lý nhân viên</h2>
+        <p class="subtitle">Tổng cộng {{ totalRecords }} nhân viên</p>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary btn-sm"
+          (click)="refresh()"
+          [disabled]="isLoading"
+          title="Làm mới dữ liệu">
+          <i class="icon-refresh"></i>
+          Làm mới
+        </button>
+        <button 
+          class="btn btn-primary" 
+          (click)="createEmployee()"
+          *ngIf="canCreateEmployee()">
+          <i class="icon-plus"></i>
+          Thêm nhân viên
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters and Search -->
+  <div class="filters-section">
+    <div class="filters-row">
+      <!-- Search -->
+      <div class="filter-group search-group">
+        <label>Tìm kiếm</label>
+        <div class="search-box">
+          <input 
+            type="text" 
+            placeholder="Tìm theo tên, mã NV, email..."
+            [value]="searchTerm"
+            (input)="onSearchChange($event)"
+            class="form-control"
+            [disabled]="isLoading">
+          <i class="icon-search"></i>
+        </div>
+      </div>
+
+      <!-- Department Filter -->
+      <div class="filter-group">
+        <label>Phòng ban</label>
+        <select 
+          class="form-control"
+          [(ngModel)]="selectedDepartment"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+          <option value="">Tất cả phòng ban</option>
+          <option 
+            *ngFor="let dept of departments" 
+            [value]="dept.id">
+            {{ dept.name }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="filter-group">
+        <label>Trạng thái</label>
+        <select 
+          class="form-control"
+          [(ngModel)]="selectedStatus"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+          <option 
+            *ngFor="let option of statusOptions" 
+            [value]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Team Leader Filter -->
+      <div class="filter-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox"
+            [(ngModel)]="showTeamLeadersOnly"
+            (change)="onFilterChange()"
+            [disabled]="isLoading">
+          <span class="checkmark"></span>
+          Chỉ trưởng nhóm
+        </label>
+      </div>
+
+      <!-- Clear Filters -->
+      <div class="filter-group">
+        <button 
+          class="btn btn-outline btn-sm"
+          (click)="clearFilters()"
+          [disabled]="isLoading">
+          <i class="icon-clear"></i>
+          Xóa bộ lọc
+        </button>
+      </div>
+    </div>
+
+    <!-- Results Info -->
+    <div class="results-info" *ngIf="!isLoading">
+      <span class="results-count">
+        Hiển thị {{ employees.length }} / {{ totalRecords }} nhân viên
+      </span>
+      <div class="quick-stats">
+        <span class="stat">
+          <i class="icon-check-circle text-success"></i>
+          {{ getActiveEmployeesCount() }} đang làm việc
+        </span>
+        <span class="stat">
+          <i class="icon-star text-warning"></i>
+          {{ getTeamLeadersCount() }} trưởng nhóm
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Đang tải dữ liệu...</p>
+  </div>
+
+  <!-- Employee Table -->
+  <div class="table-container" *ngIf="!isLoading">
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Mã NV</th>
+            <th>Họ tên</th>
+            <th>Chức vụ</th>
+            <th>Phòng ban</th>
+            <th>Điện thoại</th>
+            <th>Ngày vào làm</th>
+            <th>Trạng thái</th>
+            <th class="actions-col">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let employee of employees; trackBy: trackByEmployeeId" class="table-row">
+            <td class="employee-code">
+              <strong>{{ employee.employeeCode }}</strong>
+              <span class="team-leader-badge" *ngIf="employee.isTeamLeader" title="Trưởng nhóm">
+                <i class="icon-star"></i>
+              </span>
+            </td>
+            <td class="employee-name">
+              <div class="name-info">
+                <strong>{{ employee.fullName }}</strong>
+                <small *ngIf="employee.phoneNumber" class="text-muted">
+                  {{ employee.phoneNumber }}
+                </small>
+              </div>
+            </td>
+            <td>{{ employee.position || 'Chưa xác định' }}</td>
+            <td>
+              <span class="department-name">
+                {{ getDepartmentName(employee.departmentId) }}
+              </span>
+            </td>
+            <td>{{ employee.phoneNumber || '-' }}</td>
+            <td>{{ employee.hireDate ? formatDate(employee.hireDate) : '-' }}</td>
+            <td>
+              <span 
+                class="status-badge"
+                [class]="getStatusClass(employee.isActive)"
+                [title]="getStatusText(employee.isActive)">
+                {{ getStatusText(employee.isActive) }}
+              </span>
+            </td>
+            <td class="actions">
+              <div class="btn-group">
+                <button 
+                  class="btn btn-sm btn-info"
+                  (click)="viewEmployee(employee)"
+                  title="Xem chi tiết">
+                  <i class="icon-eye"></i>
+                </button>
+                <button 
+                  class="btn btn-sm btn-primary"
+                  (click)="editEmployee(employee)"
+                  *ngIf="canEditEmployee()"
+                  title="Chỉnh sửa">
+                  <i class="icon-edit"></i>
+                </button>
+                <button 
+                  class="btn btn-sm"
+                  [class]="employee.isActive ? 'btn-warning' : 'btn-success'"
+                  (click)="toggleEmployeeStatus(employee)"
+                  *ngIf="canManageStatus"
+                  [title]="employee.isActive ? 'Vô hiệu hóa' : 'Kích hoạt'">
+                  <i [class]="employee.isActive ? 'icon-pause' : 'icon-play'"></i>
+                </button>
+                <button 
+                  class="btn btn-sm btn-danger"
+                  (click)="deleteEmployee(employee)"
+                  *ngIf="canDeleteEmployee()"
+                  title="Xóa">
+                  <i class="icon-delete"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="employees.length === 0 && !isLoading">
+      <div class="empty-content">
+        <i class="icon-users"></i>
+        <h3>Không có nhân viên</h3>
+        <p>Không tìm thấy nhân viên nào phù hợp với tiêu chí tìm kiếm.</p>
+        <button 
+          class="btn btn-primary"
+          (click)="createEmployee()"
+          *ngIf="canCreateEmployee()">
+          <i class="icon-plus"></i>
+          Thêm nhân viên đầu tiên
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination-container" *ngIf="totalPages > 1 && !isLoading">
+    <div class="pagination-info">
+      <span>Trang {{ currentPage }} / {{ totalPages }}</span>
+      <div class="page-size-selector">
+        <label>Hiển thị:</label>
+        <select 
+          class="form-control form-control-sm"
+          [(ngModel)]="pageSize"
+          (change)="onPageSizeChange(pageSize)">
+          <option *ngFor="let size of pageSizeOptions" [value]="size">
+            {{ size }}
+          </option>
+        </select>
+        <span>mục/trang</span>
+      </div>
+    </div>
+    
+    <nav class="pagination">
+      <!-- First Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === 1"
+        (click)="onPageChange(1)"
+        title="Trang đầu">
+        <i class="icon-first-page"></i>
+      </button>
+      
+      <!-- Previous Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === 1"
+        (click)="onPageChange(currentPage - 1)"
+        title="Trang trước">
+        <i class="icon-prev"></i>
+      </button>
+      
+      <!-- Page Numbers -->
+      <button 
+        *ngFor="let page of getPaginationNumbers()"
+        class="btn btn-sm"
+        [class]="page === currentPage ? 'btn-primary' : 'btn-outline'"
+        [disabled]="page === -1"
+        (click)="page > 0 ? onPageChange(page) : null">
+        {{ page === -1 ? '...' : page }}
+      </button>
+      
+      <!-- Next Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === totalPages"
+        (click)="onPageChange(currentPage + 1)"
+        title="Trang sau">
+        <i class="icon-next"></i>
+      </button>
+      
+      <!-- Last Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === totalPages"
+        (click)="onPageChange(totalPages)"
+        title="Trang cuối">
+        <i class="icon-last-page"></i>
+      </button>
+    </nav>
+  </div>
+</div>

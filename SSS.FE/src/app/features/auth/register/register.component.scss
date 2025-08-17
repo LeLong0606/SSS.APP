@@ -1,2 +1,2 @@
-// Import login component styles
-@import '../login/login.component.scss';
+// Use @use instead of deprecated @import
+@use '../login/login.component.scss';

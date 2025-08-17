@@ -68,7 +68,14 @@ export class AuthService {
   login(credentials: LoginRequest): Observable<AuthResponse> {
     this.setLoading(true);
     
-    return this.http.post<AuthResponse>(`${this.API_URL}/auth/login`, credentials).pipe(
+    // Create clean request object without rememberMe
+    const loginRequest = {
+      email: credentials.email,
+      password: credentials.password
+      // NO rememberMe field sent to backend!
+    };
+    
+    return this.http.post<AuthResponse>(`${this.API_URL}/auth/login`, loginRequest).pipe(
       tap(response => {
         if (response.success && response.token && response.user) {
           this.handleSuccessfulAuth(response);
@@ -82,7 +89,17 @@ export class AuthService {
   register(userData: RegisterRequest): Observable<AuthResponse> {
     this.setLoading(true);
     
-    return this.http.post<AuthResponse>(`${this.API_URL}/auth/register`, userData).pipe(
+    // Ensure role is string (not enum)
+    const registerRequest = {
+      email: userData.email,
+      password: userData.password,
+      confirmPassword: userData.confirmPassword,
+      fullName: userData.fullName,
+      employeeCode: userData.employeeCode,
+      role: typeof userData.role === 'string' ? userData.role : userData.role.toString()
+    };
+    
+    return this.http.post<AuthResponse>(`${this.API_URL}/auth/register`, registerRequest).pipe(
       tap(response => {
         if (response.success && response.token && response.user) {
           this.handleSuccessfulAuth(response);
@@ -153,15 +170,17 @@ export class AuthService {
   }
 
   // Check if user has specific role
-  hasRole(role: UserRole): boolean {
+  hasRole(role: UserRole | string): boolean {
     const user = this.getCurrentUserSync();
-    return user?.roles?.includes(role) || false;
+    const roleString = typeof role === 'string' ? role : role.toString();
+    return user?.roles?.includes(roleString) || false;
   }
 
   // Check if user has any of the specified roles
-  hasAnyRole(roles: UserRole[]): boolean {
+  hasAnyRole(roles: (UserRole | string)[]): boolean {
     const user = this.getCurrentUserSync();
-    return user?.roles?.some(role => roles.includes(role)) || false;
+    const roleStrings = roles.map(role => typeof role === 'string' ? role : role.toString());
+    return user?.roles?.some(userRole => roleStrings.includes(userRole)) || false;
   }
 
   // Check if user has permission
@@ -324,13 +343,13 @@ export class AuthService {
     });
   }
 
-  // Get user permissions based on roles
+  // Get user permissions based on string roles (not enum)
   private getUserPermissions(user: UserInfo): string[] {
     const permissions: string[] = [];
     
     user.roles.forEach(role => {
       switch (role) {
-        case UserRole.ADMINISTRATOR:
+        case 'Administrator':
           permissions.push(
             'users.create', 'users.read', 'users.update', 'users.delete',
             'employees.create', 'employees.read', 'employees.update', 'employees.delete',
@@ -340,7 +359,7 @@ export class AuthService {
           );
           break;
           
-        case UserRole.DIRECTOR:
+        case 'Director':
           permissions.push(
             'employees.create', 'employees.read', 'employees.update', 'employees.delete',
             'departments.create', 'departments.read', 'departments.update',
@@ -348,7 +367,7 @@ export class AuthService {
           );
           break;
           
-        case UserRole.TEAM_LEADER:
+        case 'TeamLeader':
           permissions.push(
             'employees.create', 'employees.read', 'employees.update',
             'departments.read',
@@ -356,7 +375,7 @@ export class AuthService {
           );
           break;
           
-        case UserRole.EMPLOYEE:
+        case 'Employee':
           permissions.push(
             'employees.read',
             'departments.read',

@@ -74,7 +74,17 @@ public static class MiddlewareExtensions
     private static RateLimitOptions GetRateLimitOptions(IConfiguration configuration)
     {
         var options = new RateLimitOptions();
-        configuration.GetSection("RateLimit").Bind(options);
+        var rateLimitSection = configuration.GetSection("RateLimit");
+        
+        if (rateLimitSection.Exists())
+        {
+            options.MaxRequests = rateLimitSection.GetValue<int>("MaxRequests", 100);
+            
+            // Handle TimeWindowMinutes from config
+            var timeWindowMinutes = rateLimitSection.GetValue<int>("TimeWindowMinutes", 1);
+            options.TimeWindow = TimeSpan.FromMinutes(timeWindowMinutes);
+        }
+        
         return options;
     }
 

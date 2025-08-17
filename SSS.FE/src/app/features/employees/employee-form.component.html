@@ -1,0 +1,250 @@
+<!-- Employee Form Component Template -->
+<div class="employee-form-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <button 
+          class="btn-back"
+          (click)="goBack()"
+          title="Quay lại">
+          <i class="icon-arrow-left"></i>
+        </button>
+        <div>
+          <h2>{{ getPageTitle() }}</h2>
+          <p class="subtitle" *ngIf="isEditMode && currentEmployee">
+            Nhân viên: {{ currentEmployee.employeeCode }} - {{ currentEmployee.fullName }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Đang tải thông tin nhân viên...</p>
+  </div>
+
+  <!-- Form -->
+  <div class="form-container" *ngIf="!isLoading">
+    <form [formGroup]="employeeForm" (ngSubmit)="onSubmit()" class="employee-form">
+      
+      <!-- Basic Information -->
+      <div class="form-section">
+        <h3 class="section-title">
+          <i class="icon-user"></i>
+          Thông tin cơ bản
+        </h3>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="employeeCode" class="required">Mã nhân viên</label>
+            <input
+              type="text"
+              id="employeeCode"
+              formControlName="employeeCode"
+              class="form-control"
+              [class.error]="isFieldInvalid('employeeCode')"
+              placeholder="Nhập mã nhân viên">
+            <div class="error-message" *ngIf="isFieldInvalid('employeeCode')">
+              {{ getFieldError('employeeCode') }}
+            </div>
+            <small class="form-help" *ngIf="!isEditMode">
+              Mã nhân viên phải duy nhất trong hệ thống
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="fullName" class="required">Họ và tên</label>
+            <input
+              type="text"
+              id="fullName"
+              formControlName="fullName"
+              class="form-control"
+              [class.error]="isFieldInvalid('fullName')"
+              placeholder="Nhập họ và tên đầy đủ">
+            <div class="error-message" *ngIf="isFieldInvalid('fullName')">
+              {{ getFieldError('fullName') }}
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="position">Chức vụ</label>
+            <input
+              type="text"
+              id="position"
+              formControlName="position"
+              class="form-control"
+              [class.error]="isFieldInvalid('position')"
+              placeholder="Nhập chức vụ">
+            <div class="error-message" *ngIf="isFieldInvalid('position')">
+              {{ getFieldError('position') }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="departmentId">Phòng ban</label>
+            <select
+              id="departmentId"
+              formControlName="departmentId"
+              class="form-control"
+              [class.error]="isFieldInvalid('departmentId')">
+              <option value="">Chọn phòng ban</option>
+              <option 
+                *ngFor="let dept of departments" 
+                [value]="dept.id">
+                {{ dept.name }}
+              </option>
+            </select>
+            <div class="error-message" *ngIf="isFieldInvalid('departmentId')">
+              {{ getFieldError('departmentId') }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contact Information -->
+      <div class="form-section">
+        <h3 class="section-title">
+          <i class="icon-phone"></i>
+          Thông tin liên hệ
+        </h3>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="phoneNumber">Số điện thoại</label>
+            <input
+              type="tel"
+              id="phoneNumber"
+              formControlName="phoneNumber"
+              class="form-control"
+              [class.error]="isFieldInvalid('phoneNumber')"
+              placeholder="Nhập số điện thoại">
+            <div class="error-message" *ngIf="isFieldInvalid('phoneNumber')">
+              {{ getFieldError('phoneNumber') }}
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <label for="address">Địa chỉ</label>
+            <textarea
+              id="address"
+              formControlName="address"
+              class="form-control"
+              [class.error]="isFieldInvalid('address')"
+              placeholder="Nhập địa chỉ"
+              rows="2"></textarea>
+            <div class="error-message" *ngIf="isFieldInvalid('address')">
+              {{ getFieldError('address') }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Work Information -->
+      <div class="form-section">
+        <h3 class="section-title">
+          <i class="icon-briefcase"></i>
+          Thông tin công việc
+        </h3>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="hireDate">Ngày vào làm</label>
+            <input
+              type="date"
+              id="hireDate"
+              formControlName="hireDate"
+              class="form-control"
+              [class.error]="isFieldInvalid('hireDate')">
+            <div class="error-message" *ngIf="isFieldInvalid('hireDate')">
+              {{ getFieldError('hireDate') }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="salary">Lương (VNĐ)</label>
+            <input
+              type="number"
+              id="salary"
+              formControlName="salary"
+              class="form-control"
+              [class.error]="isFieldInvalid('salary')"
+              placeholder="Nhập mức lương"
+              min="0"
+              step="100000">
+            <div class="error-message" *ngIf="isFieldInvalid('salary')">
+              {{ getFieldError('salary') }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional Options -->
+      <div class="form-section">
+        <h3 class="section-title">
+          <i class="icon-settings"></i>
+          Tùy chọn khác
+        </h3>
+        
+        <div class="form-row">
+          <div class="form-group" *ngIf="canShowTeamLeaderOption()">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox"
+                formControlName="isTeamLeader">
+              <span class="checkmark"></span>
+              <span class="checkbox-text">
+                <strong>Trưởng nhóm</strong>
+                <small>Nhân viên này sẽ được chỉ định làm trưởng nhóm</small>
+              </span>
+            </label>
+          </div>
+
+          <div class="form-group" *ngIf="isEditMode">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox"
+                formControlName="isActive">
+              <span class="checkmark"></span>
+              <span class="checkbox-text">
+                <strong>Đang hoạt động</strong>
+                <small>Bỏ chọn để tạm ngưng hoạt động của nhân viên</small>
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button 
+          type="button"
+          class="btn btn-secondary"
+          (click)="cancel()"
+          [disabled]="isSubmitting">
+          <i class="icon-close"></i>
+          Hủy
+        </button>
+        
+        <button 
+          type="submit"
+          class="btn btn-primary"
+          [disabled]="employeeForm.invalid || isSubmitting">
+          <span *ngIf="!isSubmitting">
+            <i [class]="isEditMode ? 'icon-save' : 'icon-plus'"></i>
+            {{ getSubmitButtonText() }}
+          </span>
+          <span *ngIf="isSubmitting" class="loading-text">
+            <span class="spinner-small"></span>
+            {{ isEditMode ? 'Đang cập nhật...' : 'Đang tạo...' }}
+          </span>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>

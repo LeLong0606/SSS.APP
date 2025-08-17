@@ -27,8 +27,8 @@ public class RateLimitingMiddleware
         var clientId = GetClientId(context);
         var endpoint = GetEndpoint(context);
         
-        // Skip rate limiting for health checks and swagger
-        if (ShouldSkipRateLimit(context.Request.Path))
+        // Skip rate limiting for health checks, swagger, and OPTIONS requests (CORS preflight)
+        if (ShouldSkipRateLimit(context.Request.Path) || context.Request.Method == "OPTIONS")
         {
             await _next(context);
             return;
@@ -110,6 +110,12 @@ public class RateLimitingMiddleware
             "/api-docs",
             "/.well-known"
         };
+
+        // Skip OPTIONS requests (CORS preflight)
+        if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
 
         return pathsToSkip.Any(skip => path.StartsWith(skip, StringComparison.OrdinalIgnoreCase));
     }

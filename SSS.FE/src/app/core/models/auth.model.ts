@@ -1,6 +1,4 @@
-import { BaseEntity } from './api-response.model';
-
-// User roles enum
+// User roles enum - EXACT match with backend
 export enum UserRole {
   ADMINISTRATOR = 'Administrator',
   DIRECTOR = 'Director',
@@ -8,36 +6,36 @@ export enum UserRole {
   EMPLOYEE = 'Employee'
 }
 
-// Login request
+// ✅ FIXED: Login request - EXACT match with backend LoginRequest (NO rememberMe!)
 export interface LoginRequest {
   email: string;
   password: string;
-  rememberMe?: boolean;
+  // rememberMe removed - backend doesn't support it
 }
 
-// Register request  
+// ✅ FIXED: Register request - EXACT match with backend RegisterRequest  
 export interface RegisterRequest {
   email: string;
   password: string;
   confirmPassword: string;
   fullName: string;
   employeeCode?: string;
-  role: UserRole;
+  role: string; // ✅ FIX: STRING, not UserRole enum to match backend!
 }
 
-// Change password request
+// Change password request - EXACT match with backend ChangePasswordRequest
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
   confirmNewPassword: string;
 }
 
-// Refresh token request
+// Refresh token request - EXACT match with backend RefreshTokenRequest
 export interface RefreshTokenRequest {
   refreshToken: string;
 }
 
-// Authentication response
+// Authentication response - EXACT match with backend AuthResponse
 export interface AuthResponse {
   success: boolean;
   message: string;
@@ -48,16 +46,16 @@ export interface AuthResponse {
   errors?: string[];
 }
 
-// User information
-export interface UserInfo extends BaseEntity {
+// ✅ FIXED: User information - EXACT match with backend UserInfo
+export interface UserInfo {
+  id: string; // ✅ FIX: STRING, not number! Backend uses ApplicationUser.Id (GUID)
   email: string;
   fullName: string;
   employeeCode?: string;
-  roles: UserRole[];
+  roles: string[]; // ✅ FIX: STRING[], not UserRole[] to match backend List<string>
   isActive: boolean;
-  avatar?: string;
-  department?: string;
-  position?: string;
+  createdAt: Date;
+  // ✅ FIX: Removed extra fields not in backend (avatar, department, position)
 }
 
 // Current user state
@@ -71,20 +69,25 @@ export interface AuthState {
   error: string | null;
 }
 
-// Login form data
+// ✅ FIXED: Login form data - REMOVED rememberMe
 export interface LoginFormData {
   email: string;
   password: string;
-  rememberMe: boolean;
+  // ✅ FIX: rememberMe removed
 }
 
-// Register form data
+// ✅ FIXED: Register form data - role as string
 export interface RegisterFormData {
   email: string;
   password: string;
   confirmPassword: string;
   fullName: string;
   employeeCode: string;
-  role: UserRole;
+  role: string; // ✅ FIX: STRING to match backend
   acceptTerms: boolean;
+}
+
+// NEW: Revoke token request - EXACT match with backend RevokeTokenRequest
+export interface RevokeTokenRequest {
+  refreshToken?: string;
 }

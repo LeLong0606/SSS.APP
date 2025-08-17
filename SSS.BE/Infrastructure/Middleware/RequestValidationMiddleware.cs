@@ -88,6 +88,12 @@ public class RequestValidationMiddleware
         var result = new ValidationResult { IsValid = true };
         var request = context.Request;
 
+        // Skip validation for OPTIONS requests (CORS preflight)
+        if (request.Method == "OPTIONS")
+        {
+            return result; // Always allow OPTIONS requests
+        }
+
         // 1. Validate Content-Length
         if (request.ContentLength > _options.MaxRequestSize)
         {

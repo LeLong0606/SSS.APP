@@ -6,24 +6,26 @@ import { AuthService } from '../services/auth.service';
 import { environment } from '../../../environments/environment';
 
 export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn): Observable<HttpEvent<unknown>> => {
-  // Skip auth header for certain requests
-  if (shouldSkipAuth(req.url)) {
-    return next(req);
-  }
-
   // Get stored token
   const authService = inject(AuthService);
   const token = authService.getStoredToken();
 
-  // Clone request and add authorization header if token exists
-  if (token) {
-    const authReq = req.clone({
-      headers: req.headers.set('Authorization', `Bearer ${token}`)
-    });
-    return next(authReq);
+  // Set default headers
+  let headers = req.headers;
+  
+  // Ensure Content-Type is set for POST/PUT requests
+  if ((req.method === 'POST' || req.method === 'PUT') && !headers.has('Content-Type')) {
+    headers = headers.set('Content-Type', 'application/json');
   }
 
-  return next(req);
+  // Add authorization header if token exists and not in skip list
+  if (token && !shouldSkipAuth(req.url)) {
+    headers = headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  // Clone request with updated headers
+  const authReq = req.clone({ headers });
+  return next(authReq);
 };
 
 function shouldSkipAuth(url: string): boolean {

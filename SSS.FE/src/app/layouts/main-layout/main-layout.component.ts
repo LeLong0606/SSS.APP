@@ -1,18 +1,17 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Router, NavigationEnd } from '@angular/router';
+import { Subject, takeUntil, filter } from 'rxjs';
 
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { UserInfo, UserRole } from '../../core/models/auth.model';
-import { environment } from '../../../environments/environment';
 
 interface MenuItem {
   label: string;
   icon: string;
   route: string;
   requiredRoles?: UserRole[];
+  badge?: string;
   children?: MenuItem[];
 }
 
@@ -26,49 +25,58 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   currentUser: UserInfo | null = null;
-  isLoading = false;
   isSidebarExpanded = true;
-  appName = environment.appName;
-  appVersion = environment.version;
+  isMobileView = false;
+  currentRoute = '';
+  isLoading = false;
+  appName = 'SSS Employee Management';
 
+  // Menu items based on user roles
   menuItems: MenuItem[] = [
     {
       label: 'Trang chủ',
-      icon: 'dashboard',
-      route: '/dashboard',
-      requiredRoles: [UserRole.EMPLOYEE, UserRole.TEAM_LEADER, UserRole.DIRECTOR, UserRole.ADMINISTRATOR]
+      icon: '🏠',
+      route: '/dashboard'
     },
     {
       label: 'Quản lý nhân viên',
-      icon: 'people',
+      icon: '👥',
       route: '/employees',
-      requiredRoles: [UserRole.TEAM_LEADER, UserRole.DIRECTOR, UserRole.ADMINISTRATOR]
+      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
     },
     {
-      label: 'Quản lý phòng ban',
-      icon: 'business',
+      label: 'Phòng ban',
+      icon: '🏢',
       route: '/departments',
-      requiredRoles: [UserRole.DIRECTOR, UserRole.ADMINISTRATOR]
+      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
     },
     {
-      label: 'Quản lý ca làm việc',
-      icon: 'schedule',
+      label: 'Ca làm việc',
+      icon: '📅',
       route: '/work-shifts',
-      requiredRoles: [UserRole.EMPLOYEE, UserRole.TEAM_LEADER, UserRole.DIRECTOR, UserRole.ADMINISTRATOR]
+      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
+    },
+    {
+      label: 'Địa điểm làm việc',
+      icon: '📍',
+      route: '/work-locations',
+      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR]
     },
     {
       label: 'Hồ sơ cá nhân',
-      icon: 'account_circle',
-      route: '/profile',
-      requiredRoles: [UserRole.EMPLOYEE, UserRole.TEAM_LEADER, UserRole.DIRECTOR, UserRole.ADMINISTRATOR]
+      icon: '👤',
+      route: '/profile'
     },
     {
       label: 'Quản trị hệ thống',
-      icon: 'settings',
+      icon: '⚙️',
       route: '/admin',
       requiredRoles: [UserRole.ADMINISTRATOR]
     }
   ];
+
+  // Filtered menu based on user permissions
+  filteredMenuItems: MenuItem[] = [];
 
   constructor(
     private authService: AuthService,
@@ -77,13 +85,9 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Subscribe to auth state changes
-    this.authService.authState$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(state => {
-        this.currentUser = state.user;
-        this.isLoading = state.loading;
-      });
+    this.initializeUser();
+    this.initializeResponsive();
+    this.trackRouteChanges();
   }
 
   ngOnDestroy(): void {
@@ -91,68 +95,262 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  // Check if user has access to menu item
-  hasAccess(menuItem: MenuItem): boolean {
-    if (!menuItem.requiredRoles || menuItem.requiredRoles.length === 0) {
-      return true;
+  private initializeUser(): void {
+    // Subscribe to auth state changes
+    this.authService.authState$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(authState => {
+        this.currentUser = authState.user;
+        this.updateMenuItems();
+      });
+
+    // Get current user if not already loaded
+    if (!this.currentUser) {
+      this.authService.getCurrentUser()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (response) => {
+            if (response.success && response.user) {
+              this.currentUser = response.user;
+              this.updateMenuItems();
+            }
+          },
+          error: (error) => {
+            console.error('Error loading current user:', error);
+          }
+        });
+    }
+  }
+
+  private updateMenuItems(): void {
+    if (!this.currentUser) {
+      this.filteredMenuItems = [];
+      return;
     }
 
-    return this.authService.hasAnyRole(menuItem.requiredRoles);
+    this.filteredMenuItems = this.menuItems.filter(item => {
+      if (!item.requiredRoles || item.requiredRoles.length === 0) {
+        return true;
+      }
+
+      return this.authService.hasAnyRole(item.requiredRoles);
+    });
   }
 
-  // Get visible menu items based on user roles
-  getVisibleMenuItems(): MenuItem[] {
-    return this.menuItems.filter(item => this.hasAccess(item));
+  private initializeResponsive(): void {
+    this.checkScreenSize();
+    window.addEventListener('resize', () => this.checkScreenSize());
   }
 
-  // Toggle sidebar
+  private checkScreenSize(): void {
+    this.isMobileView = window.innerWidth < 768;
+    if (this.isMobileView) {
+      this.isSidebarExpanded = false;
+    }
+  }
+
+  private trackRouteChanges(): void {
+    this.router.events
+      .pipe(
+        filter(event => event instanceof NavigationEnd),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((event: NavigationEnd) => {
+        this.currentRoute = event.urlAfterRedirects;
+      });
+  }
+
+  // Sidebar methods
   toggleSidebar(): void {
     this.isSidebarExpanded = !this.isSidebarExpanded;
   }
 
-  // Navigate to route
-  navigateTo(route: string): void {
+  closeSidebar(): void {
+    if (this.isMobileView) {
+      this.isSidebarExpanded = false;
+    }
+  }
+
+  // Navigation methods
+  navigate(route: string): void {
     this.router.navigate([route]);
+    this.closeSidebar();
   }
 
-  // Logout
-  logout(): void {
-    this.authService.logout().subscribe({
-      next: () => {
-        this.notificationService.showSuccess('Đăng xuất thành công');
-      },
-      error: () => {
-        // Even if logout API fails, we still redirect to login
-        this.notificationService.showInfo('Đã đăng xuất khỏi hệ thống');
-      }
-    });
+  isActiveRoute(route: string): boolean {
+    if (route === '/dashboard') {
+      return this.currentRoute === '/' || this.currentRoute === '/dashboard';
+    }
+    return this.currentRoute.startsWith(route);
   }
 
-  // Get user display name
+  // User methods
   getUserDisplayName(): string {
-    return this.currentUser?.fullName || this.currentUser?.email || 'User';
+    if (!this.currentUser) return 'Người dùng';
+    return this.currentUser.fullName || this.currentUser.email || 'Người dùng';
   }
 
-  // Get user role display
-  getUserRoleDisplay(): string {
-    if (!this.currentUser?.roles || this.currentUser.roles.length === 0) {
-      return 'Người dùng';
+  getUserRole(): string {
+    if (!this.currentUser || !this.currentUser.roles || this.currentUser.roles.length === 0) {
+      return 'Nhân viên';
     }
 
-    const roleMap = {
+    const role = this.currentUser.roles[0];
+    switch (role) {
+      case UserRole.ADMINISTRATOR:
+        return 'Quản trị viên';
+      case UserRole.DIRECTOR:
+        return 'Giám đốc';
+      case UserRole.TEAM_LEADER:
+        return 'Trưởng phòng';
+      case UserRole.EMPLOYEE:
+        return 'Nhân viên';
+      default:
+        return 'Nhân viên';
+    }
+  }
+
+  getUserAvatar(): string {
+    // Return default avatar or user's profile picture
+    return this.currentUser?.avatar || 'assets/images/default-avatar.png';
+  }
+
+  getRoleBadgeClass(): string {
+    if (!this.currentUser || !this.currentUser.roles || this.currentUser.roles.length === 0) {
+      return 'role-employee';
+    }
+
+    const role = this.currentUser.roles[0];
+    switch (role) {
+      case UserRole.ADMINISTRATOR:
+        return 'role-admin';
+      case UserRole.DIRECTOR:
+        return 'role-director';
+      case UserRole.TEAM_LEADER:
+        return 'role-team-leader';
+      case UserRole.EMPLOYEE:
+      default:
+        return 'role-employee';
+    }
+  }
+
+  // Action methods
+  goToProfile(): void {
+    this.router.navigate(['/profile']);
+    this.closeSidebar();
+  }
+
+  goToSettings(): void {
+    if (this.authService.hasRole(UserRole.ADMINISTRATOR)) {
+      this.router.navigate(['/admin/settings']);
+    } else {
+      this.router.navigate(['/profile/settings']);
+    }
+    this.closeSidebar();
+  }
+
+  logout(): void {
+    if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+      this.authService.logout()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: () => {
+            this.notificationService.showSuccess('Đăng xuất thành công');
+            this.router.navigate(['/auth/login']);
+          },
+          error: (error) => {
+            console.error('Logout error:', error);
+            this.notificationService.showError('Có lỗi khi đăng xuất');
+            // Still redirect to login even if logout API fails
+            this.router.navigate(['/auth/login']);
+          }
+        });
+    }
+  }
+
+  // Theme methods (for future implementation)
+  toggleTheme(): void {
+    // TODO: Implement theme switching
+    this.notificationService.showInfo('Tính năng chuyển đổi giao diện sẽ được cập nhật');
+  }
+
+  // Notification methods
+  hasNotifications(): boolean {
+    // TODO: Implement notification system
+    return false;
+  }
+
+  getNotificationCount(): number {
+    // TODO: Implement notification counting
+    return 0;
+  }
+
+  openNotifications(): void {
+    // TODO: Implement notifications panel
+    this.notificationService.showInfo('Tính năng thông báo sẽ được cập nhật');
+  }
+
+  // Help methods
+  openHelp(): void {
+    // TODO: Implement help system
+    this.notificationService.showInfo('Tính năng trợ giúp sẽ được cập nhật');
+  }
+
+  // Quick actions
+  quickCreateEmployee(): void {
+    if (this.authService.hasAnyRole([UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER])) {
+      this.router.navigate(['/employees/create']);
+    } else {
+      this.notificationService.showError('Bạn không có quyền tạo nhân viên mới');
+    }
+  }
+
+  quickCreateShift(): void {
+    if (this.authService.hasAnyRole([UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER])) {
+      this.router.navigate(['/work-shifts/create']);
+    } else {
+      this.notificationService.showError('Bạn không có quyền tạo ca làm việc');
+    }
+  }
+
+  // Statistics methods (for dashboard widgets in sidebar)
+  getQuickStats(): any {
+    // TODO: Implement quick statistics
+    return {
+      employees: 0,
+      departments: 0,
+      todayShifts: 0,
+      locations: 0
+    };
+  }
+
+  // Template helper methods
+  getUserRoleDisplay(): string {
+    if (!this.currentUser?.roles?.length) {
+      return 'Chưa xác định';
+    }
+    
+    const roleNames = {
       [UserRole.ADMINISTRATOR]: 'Quản trị viên',
       [UserRole.DIRECTOR]: 'Giám đốc',
       [UserRole.TEAM_LEADER]: 'Trưởng nhóm',
       [UserRole.EMPLOYEE]: 'Nhân viên'
     };
-
-    // Get the highest role
-    const highestRole = this.currentUser.roles[0];
-    return roleMap[highestRole] || 'Người dùng';
+    
+    return this.currentUser.roles
+      .map(role => roleNames[role] || role)
+      .join(', ');
   }
 
-  // Get user avatar
-  getUserAvatar(): string {
-    return this.currentUser?.avatar || '/assets/images/avatar-default.png';
+  getVisibleMenuItems(): MenuItem[] {
+    return this.menuItems.filter(item => {
+      if (!item.requiredRoles) return true;
+      if (!this.currentUser) return false;
+      return this.authService.hasAnyRole(item.requiredRoles);
+    });
+  }
+
+  navigateTo(route: string): void {
+    this.router.navigate([route]);
   }
 }

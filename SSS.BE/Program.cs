@@ -133,7 +133,7 @@ builder.Services.AddEndpointsApiExplorer();
 // ===== Swagger with JWT Authentication =====
 builder.Services.AddSwaggerWithJwtAuth();
 
-// CORS - Updated for Frontend Integration
+// CORS - Updated for Frontend Integration with proper preflight handling
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -141,7 +141,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:50503", "https://localhost:50503") // Angular frontend ports
                .AllowAnyMethod()
                .AllowAnyHeader()
-               .AllowCredentials();
+               .AllowCredentials()
+               .SetPreflightMaxAge(TimeSpan.FromMinutes(10)); // Cache preflight for 10 minutes
     });
     
     // Keep AllowAll for development but use AllowFrontend in production
@@ -149,7 +150,8 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
                .AllowAnyMethod()
-               .AllowAnyHeader();
+               .AllowAnyHeader()
+               .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
 });
 
@@ -158,7 +160,10 @@ builder.Services.AddHostedService<DatabaseMaintenanceService>();
 
 var app = builder.Build();
 
-// ===== Use Custom Middleware Pipeline (BEFORE other middleware) =====
+// ===== CORS must be early in pipeline - BEFORE most other middleware =====
+app.UseCors("AllowFrontend"); // Move CORS to the very beginning
+
+// ===== Use Custom Middleware Pipeline (AFTER CORS) =====
 app.UseCustomMiddleware(builder.Configuration);
 
 // ===== Add Spam Prevention Middleware =====
@@ -171,14 +176,21 @@ app.UseEnglish();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    await DataSeeder.SeedAsync(services);
+    try
+    {
+        await DataSeeder.SeedAsync(services);
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding the database");
+    }
 }
 
 // ===== Default Swagger =====
 app.UseSwaggerDefault();
 
 app.UseHttpsRedirection();
-app.UseCors("AllowFrontend"); // Use specific policy instead of AllowAll
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -261,6 +273,8 @@ app.MapPost("/admin/optimize-database", async (IDatabaseOptimizationService dbSe
     return Results.Ok(new { Message = "Database optimization completed", Timestamp = DateTime.UtcNow });
 }).WithTags("Admin")
   .RequireAuthorization("Administrator");
+
+app.Run();
 
 // ===== Background Service for Database Maintenance =====
 public class DatabaseMaintenanceService : BackgroundService

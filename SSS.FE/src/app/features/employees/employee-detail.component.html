@@ -1,0 +1,242 @@
+<!-- Employee Detail Component Template -->
+<div class="employee-detail-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <button 
+          class="btn-back"
+          (click)="goBack()"
+          title="Quay lại danh sách">
+          <i class="icon-arrow-left"></i>
+        </button>
+        <div class="title-info">
+          <h2>Chi tiết nhân viên</h2>
+          <div class="employee-quick-info" *ngIf="employee">
+            <span class="employee-code">{{ employee.employeeCode }}</span>
+            <span class="separator">•</span>
+            <span class="employee-name">{{ employee.fullName }}</span>
+            <span 
+              class="status-badge"
+              [class]="getStatusClass(employee.isActive)">
+              {{ getStatusText(employee.isActive) }}
+            </span>
+            <span class="team-leader-badge" *ngIf="employee.isTeamLeader">
+              <i class="icon-star"></i>
+              Trưởng nhóm
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="header-actions" *ngIf="employee">
+        <button 
+          class="btn btn-outline btn-sm"
+          (click)="editEmployee()"
+          *ngIf="canEdit">
+          <i class="icon-edit"></i>
+          Chỉnh sửa
+        </button>
+        <button 
+          class="btn btn-sm"
+          [class]="getStatusActionClass()"
+          (click)="toggleEmployeeStatus()"
+          *ngIf="canManageStatus">
+          <i [class]="employee.isActive ? 'icon-pause' : 'icon-play'"></i>
+          {{ getStatusActionText() }}
+        </button>
+        <button 
+          class="btn btn-danger btn-sm"
+          (click)="deleteEmployee()"
+          *ngIf="canDelete">
+          <i class="icon-delete"></i>
+          Xóa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Đang tải thông tin nhân viên...</p>
+  </div>
+
+  <!-- Employee Information -->
+  <div class="employee-info" *ngIf="employee && !isLoading">
+    
+    <!-- Basic Information Card -->
+    <div class="info-card">
+      <div class="card-header">
+        <h3>
+          <i class="icon-user"></i>
+          Thông tin cơ bản
+        </h3>
+      </div>
+      <div class="card-content">
+        <div class="info-grid">
+          <div class="info-item">
+            <label>Mã nhân viên</label>
+            <span class="value">{{ employee.employeeCode }}</span>
+          </div>
+          <div class="info-item">
+            <label>Họ và tên</label>
+            <span class="value">{{ employee.fullName }}</span>
+          </div>
+          <div class="info-item">
+            <label>Chức vụ</label>
+            <span class="value">{{ employee.position || 'Chưa xác định' }}</span>
+          </div>
+          <div class="info-item">
+            <label>Phòng ban</label>
+            <span class="value">{{ getDepartmentName() }}</span>
+          </div>
+          <div class="info-item">
+            <label>Vai trò</label>
+            <span class="value">
+              {{ employee.isTeamLeader ? 'Trưởng nhóm' : 'Nhân viên' }}
+            </span>
+          </div>
+          <div class="info-item">
+            <label>Trạng thái</label>
+            <span class="value">
+              <span 
+                class="status-indicator"
+                [class]="getStatusClass(employee.isActive)">
+                {{ getStatusText(employee.isActive) }}
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact Information Card -->
+    <div class="info-card" *ngIf="hasContactInfo()">
+      <div class="card-header">
+        <h3>
+          <i class="icon-phone"></i>
+          Thông tin liên hệ
+        </h3>
+      </div>
+      <div class="card-content">
+        <div class="info-grid">
+          <div class="info-item" *ngIf="employee.phoneNumber">
+            <label>Số điện thoại</label>
+            <span class="value">
+              <a [href]="'tel:' + employee.phoneNumber">{{ employee.phoneNumber }}</a>
+            </span>
+          </div>
+          <div class="info-item full-width" *ngIf="employee.address">
+            <label>Địa chỉ</label>
+            <span class="value">{{ employee.address }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Information Card -->
+    <div class="info-card" *ngIf="hasWorkInfo()">
+      <div class="card-header">
+        <h3>
+          <i class="icon-briefcase"></i>
+          Thông tin công việc
+        </h3>
+      </div>
+      <div class="card-content">
+        <div class="info-grid">
+          <div class="info-item" *ngIf="employee.hireDate">
+            <label>Ngày vào làm</label>
+            <span class="value">{{ formatDate(employee.hireDate) }}</span>
+          </div>
+          <div class="info-item" *ngIf="getWorkingYears()">
+            <label>Thâm niên</label>
+            <span class="value">{{ getWorkingYears() }} năm</span>
+          </div>
+          <div class="info-item" *ngIf="employee.salary">
+            <label>Mức lương</label>
+            <span class="value salary">{{ formatCurrency(employee.salary) }}</span>
+          </div>
+          <div class="info-item" *ngIf="department">
+            <label>Mã phòng ban</label>
+            <span class="value">{{ department.departmentCode }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Department Information Card -->
+    <div class="info-card" *ngIf="department">
+      <div class="card-header">
+        <h3>
+          <i class="icon-building"></i>
+          Thông tin phòng ban
+        </h3>
+      </div>
+      <div class="card-content">
+        <div class="info-grid">
+          <div class="info-item">
+            <label>Tên phòng ban</label>
+            <span class="value">{{ department.name }}</span>
+          </div>
+          <div class="info-item">
+            <label>Mã phòng ban</label>
+            <span class="value">{{ department.departmentCode }}</span>
+          </div>
+          <div class="info-item" *ngIf="department.teamLeaderFullName">
+            <label>Trưởng phòng</label>
+            <span class="value">{{ department.teamLeaderFullName }}</span>
+          </div>
+          <div class="info-item">
+            <label>Tổng nhân viên</label>
+            <span class="value">{{ department.employeeCount }} người</span>
+          </div>
+          <div class="info-item full-width" *ngIf="department.description">
+            <label>Mô tả</label>
+            <span class="value">{{ department.description }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- System Information Card -->
+    <div class="info-card">
+      <div class="card-header">
+        <h3>
+          <i class="icon-info"></i>
+          Thông tin hệ thống
+        </h3>
+      </div>
+      <div class="card-content">
+        <div class="info-grid">
+          <div class="info-item">
+            <label>Ngày tạo</label>
+            <span class="value">{{ formatDate(employee.createdAt) }}</span>
+          </div>
+          <div class="info-item" *ngIf="employee.updatedAt">
+            <label>Cập nhật lần cuối</label>
+            <span class="value">{{ formatDate(employee.updatedAt) }}</span>
+          </div>
+          <div class="info-item">
+            <label>ID hệ thống</label>
+            <span class="value">#{{ employee.id }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Error State -->
+  <div class="error-state" *ngIf="!employee && !isLoading">
+    <div class="error-content">
+      <i class="icon-alert-circle"></i>
+      <h3>Không tìm thấy nhân viên</h3>
+      <p>Nhân viên bạn đang tìm kiếm không tồn tại hoặc đã bị xóa.</p>
+      <button class="btn btn-primary" (click)="goBack()">
+        <i class="icon-arrow-left"></i>
+        Quay lại danh sách
+      </button>
+    </div>
+  </div>
+</div>

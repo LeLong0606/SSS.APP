@@ -1,45 +1,48 @@
-// API Response wrapper
-export interface ApiResponse<T = any> {
+// API Response interfaces that match backend exactly
+export interface ApiResponse<T> {
   success: boolean;
   message: string;
   data?: T;
-  errors?: string[];
+  errors: string[];
 }
 
-// Paginated response
-export interface PagedResponse<T = any> extends ApiResponse<T[]> {
+export interface PagedResponse<T> {
+  success: boolean;
+  message: string;
+  data: T[];
   totalCount: number;
   pageNumber: number;
   pageSize: number;
   totalPages: number;
+  errors: string[];
 }
 
-// Base entity interface
+// Base entity interface for all entities
 export interface BaseEntity {
-  id: string;
+  id: number;
   createdAt: Date;
   updatedAt?: Date;
 }
 
-// Error response
-export interface ErrorResponse {
-  message: string;
-  statusCode: number;
-  timestamp: string;
-  path: string;
-  errors?: { [key: string]: string[] };
+// Filter interface for API requests
+export interface ApiFilter {
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
 }
 
-// Pagination parameters
-export interface PaginationParams {
-  pageNumber: number;
-  pageSize: number;
+// Common API request options
+export interface ApiRequestOptions {
+  includeInactive?: boolean;
+  includeEmployees?: boolean;
   sortBy?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortOrder?: 'asc' | 'desc';
 }
 
-// Search parameters
-export interface SearchParams extends PaginationParams {
-  searchTerm?: string;
-  filters?: { [key: string]: any };
+// Error response structure
+export interface ApiError {
+  message: string;
+  errors: string[];
+  status: number;
+  timestamp: string;
 }

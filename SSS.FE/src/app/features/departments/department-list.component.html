@@ -1,0 +1,249 @@
+<!-- Department List Component Template -->
+<div class="department-list-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h2>Quản lý phòng ban</h2>
+        <p class="subtitle">Tổng cộng {{ totalRecords }} phòng ban</p>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary btn-sm"
+          (click)="refresh()"
+          [disabled]="isLoading"
+          title="Làm mới dữ liệu">
+          <i class="icon-refresh"></i>
+          Làm mới
+        </button>
+        <button 
+          class="btn btn-primary" 
+          (click)="createDepartment()"
+          *ngIf="canCreateDepartment()">
+          <i class="icon-plus"></i>
+          Thêm phòng ban
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters and Search -->
+  <div class="filters-section">
+    <div class="filters-row">
+      <!-- Search -->
+      <div class="filter-group search-group">
+        <label>Tìm kiếm</label>
+        <div class="search-box">
+          <input 
+            type="text" 
+            placeholder="Tìm theo tên phòng ban, mã phòng ban..."
+            [value]="searchTerm"
+            (input)="onSearchChange($event)"
+            class="form-control"
+            [disabled]="isLoading">
+          <i class="icon-search"></i>
+        </div>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="filter-group">
+        <label>Trạng thái</label>
+        <select 
+          class="form-control"
+          [(ngModel)]="selectedStatus"
+          (change)="onFilterChange()"
+          [disabled]="isLoading">
+          <option 
+            *ngFor="let option of statusOptions" 
+            [value]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Clear Filters -->
+      <div class="filter-group">
+        <button 
+          class="btn btn-outline btn-sm"
+          (click)="clearFilters()"
+          [disabled]="isLoading">
+          <i class="icon-clear"></i>
+          Xóa bộ lọc
+        </button>
+      </div>
+    </div>
+
+    <!-- Results Info -->
+    <div class="results-info" *ngIf="!isLoading">
+      <span class="results-count">
+        Hiển thị {{ departments.length }} / {{ totalRecords }} phòng ban
+      </span>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+    <p>Đang tải dữ liệu...</p>
+  </div>
+
+  <!-- Departments Table -->
+  <div class="table-container" *ngIf="!isLoading">
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Tên phòng ban</th>
+            <th>Mã phòng ban</th>
+            <th>Mô tả</th>
+            <th>Trưởng phòng</th>
+            <th>Số nhân viên</th>
+            <th>Ngày tạo</th>
+            <th>Trạng thái</th>
+            <th class="actions-col">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let department of departments; trackBy: trackByDepartmentId" class="table-row">
+            <td class="department-name">
+              <strong>{{ department.name }}</strong>
+            </td>
+            <td>{{ department.departmentCode || '-' }}</td>
+            <td>
+              <span [title]="department.description">
+                {{ department.description ? 
+                   (department.description.length > 50 ? 
+                    (department.description.substring(0, 50) + '...') : 
+                    department.description) : '-' }}
+              </span>
+            </td>
+            <td>
+              <div *ngIf="department.teamLeaderFullName; else noLeader">
+                <strong>{{ department.teamLeaderFullName }}</strong>
+                <br>
+                <small class="text-muted">{{ department.teamLeaderEmployeeCode }}</small>
+              </div>
+              <ng-template #noLeader>
+                <span class="text-muted">Chưa có trưởng phòng</span>
+              </ng-template>
+            </td>
+            <td>
+              <span class="employee-count">{{ department.employeeCount }} người</span>
+            </td>
+            <td>{{ formatDate(department.createdAt) }}</td>
+            <td>
+              <span 
+                class="status-badge"
+                [class]="getStatusClass(department.isActive)">
+                {{ getStatusText(department.isActive) }}
+              </span>
+            </td>
+            <td class="actions">
+              <div class="btn-group">
+                <button 
+                  class="btn btn-sm btn-info"
+                  (click)="viewDepartment(department)"
+                  title="Xem chi tiết">
+                  <i class="icon-eye"></i>
+                </button>
+                <button 
+                  class="btn btn-sm btn-primary"
+                  (click)="editDepartment(department)"
+                  *ngIf="canEditDepartment()"
+                  title="Chỉnh sửa">
+                  <i class="icon-edit"></i>
+                </button>
+                <button 
+                  class="btn btn-sm btn-danger"
+                  (click)="deleteDepartment(department)"
+                  *ngIf="canDeleteDepartment()"
+                  title="Xóa">
+                  <i class="icon-delete"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="departments.length === 0 && !isLoading">
+      <div class="empty-content">
+        <i class="icon-building"></i>
+        <h3>Không có phòng ban</h3>
+        <p>Không tìm thấy phòng ban nào phù hợp với tiêu chí tìm kiếm.</p>
+        <button 
+          class="btn btn-primary"
+          (click)="createDepartment()"
+          *ngIf="canCreateDepartment()">
+          <i class="icon-plus"></i>
+          Thêm phòng ban đầu tiên
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination-container" *ngIf="totalPages > 1 && !isLoading">
+    <div class="pagination-info">
+      <span>Trang {{ currentPage }} / {{ totalPages }}</span>
+      <div class="page-size-selector">
+        <label>Hiển thị:</label>
+        <select 
+          class="form-control form-control-sm"
+          [(ngModel)]="pageSize"
+          (change)="onPageSizeChange(pageSize)">
+          <option *ngFor="let size of pageSizeOptions" [value]="size">
+            {{ size }}
+          </option>
+        </select>
+        <span>mục/trang</span>
+      </div>
+    </div>
+    
+    <nav class="pagination">
+      <!-- First Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === 1"
+        (click)="onPageChange(1)"
+        title="Trang đầu">
+        <i class="icon-first-page"></i>
+      </button>
+      
+      <!-- Previous Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === 1"
+        (click)="onPageChange(currentPage - 1)"
+        title="Trang trước">
+        <i class="icon-prev"></i>
+      </button>
+      
+      <!-- Page Info -->
+      <span class="page-info">
+        Trang {{ currentPage }} / {{ totalPages }}
+        ({{ totalRecords }} phòng ban)
+      </span>
+      
+      <!-- Next Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === totalPages"
+        (click)="onPageChange(currentPage + 1)"
+        title="Trang sau">
+        <i class="icon-next"></i>
+      </button>
+      
+      <!-- Last Page -->
+      <button 
+        class="btn btn-sm btn-outline"
+        [disabled]="currentPage === totalPages"
+        (click)="onPageChange(totalPages)"
+        title="Trang cuối">
+        <i class="icon-last-page"></i>
+      </button>
+    </nav>
+  </div>
+</div>

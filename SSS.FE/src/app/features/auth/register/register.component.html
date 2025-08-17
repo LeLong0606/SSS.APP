@@ -1,12 +1,150 @@
 <div class="auth-container">
   <div class="auth-card">
     <div class="auth-header">
-      <h1>Đăng ký</h1>
-      <p>Chức năng đăng ký sẽ được triển khai sau.</p>
+      <h1>Đăng ký tài khoản</h1>
+      <p>Tạo tài khoản mới để truy cập hệ thống quản lý nhân viên.</p>
     </div>
 
-    <div class="auth-links">
-      <a routerLink="/auth/login">Đã có tài khoản? Đăng nhập ngay</a>
-    </div>
+    <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="auth-form">
+      <!-- Email Field -->
+      <div class="form-field">
+        <label for="email">Email <span class="required">*</span></label>
+        <input
+          type="email"
+          id="email"
+          formControlName="email"
+          placeholder="Nhập email"
+          [class.error]="isFieldInvalid('email')"
+        />
+        <div class="error-message" *ngIf="isFieldInvalid('email')">
+          {{ getFieldError('email') }}
+        </div>
+      </div>
+
+      <!-- Password Field -->
+      <div class="form-field">
+        <label for="password">Mật khẩu <span class="required">*</span></label>
+        <div class="password-input">
+          <input
+            [type]="hidePassword ? 'password' : 'text'"
+            id="password"
+            formControlName="password"
+            placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
+            [class.error]="isFieldInvalid('password')"
+          />
+          <button
+            type="button"
+            class="password-toggle"
+            (click)="togglePasswordVisibility()"
+          >
+            <span>{{ hidePassword ? '👁️' : '🙈' }}</span>
+          </button>
+        </div>
+        <div class="error-message" *ngIf="isFieldInvalid('password')">
+          {{ getFieldError('password') }}
+        </div>
+      </div>
+
+      <!-- Confirm Password Field -->
+      <div class="form-field">
+        <label for="confirmPassword">Xác nhận mật khẩu <span class="required">*</span></label>
+        <div class="password-input">
+          <input
+            [type]="hideConfirmPassword ? 'password' : 'text'"
+            id="confirmPassword"
+            formControlName="confirmPassword"
+            placeholder="Nhập lại mật khẩu"
+            [class.error]="isFieldInvalid('confirmPassword')"
+          />
+          <button
+            type="button"
+            class="password-toggle"
+            (click)="toggleConfirmPasswordVisibility()"
+          >
+            <span>{{ hideConfirmPassword ? '👁️' : '🙈' }}</span>
+          </button>
+        </div>
+        <div class="error-message" *ngIf="isFieldInvalid('confirmPassword')">
+          {{ getFieldError('confirmPassword') }}
+        </div>
+      </div>
+
+      <!-- Full Name Field -->
+      <div class="form-field">
+        <label for="fullName">Họ và tên <span class="required">*</span></label>
+        <input
+          type="text"
+          id="fullName"
+          formControlName="fullName"
+          placeholder="Nhập họ và tên đầy đủ"
+          [class.error]="isFieldInvalid('fullName')"
+        />
+        <div class="error-message" *ngIf="isFieldInvalid('fullName')">
+          {{ getFieldError('fullName') }}
+        </div>
+      </div>
+
+      <!-- Employee Code Field -->
+      <div class="form-field">
+        <label for="employeeCode">Mã nhân viên</label>
+        <input
+          type="text"
+          id="employeeCode"
+          formControlName="employeeCode"
+          placeholder="Nhập mã nhân viên (tùy chọn)"
+          [class.error]="isFieldInvalid('employeeCode')"
+        />
+        <div class="error-message" *ngIf="isFieldInvalid('employeeCode')">
+          {{ getFieldError('employeeCode') }}
+        </div>
+      </div>
+
+      <!-- Role Field with string values matching backend -->
+      <div class="form-field">
+        <label for="role">Vai trò <span class="required">*</span></label>
+        <select
+          id="role"
+          formControlName="role"
+          [class.error]="isFieldInvalid('role')"
+        >
+          <option *ngFor="let role of availableRoles" [value]="role.value">
+            {{ role.label }}
+          </option>
+        </select>
+        <div class="error-message" *ngIf="isFieldInvalid('role')">
+          {{ getFieldError('role') }}
+        </div>
+      </div>
+
+      <!-- Accept Terms Checkbox -->
+      <div class="form-field checkbox-field">
+        <label class="checkbox-label">
+          <input type="checkbox" formControlName="acceptTerms" />
+          <span class="checkmark"></span>
+          Tôi đồng ý với <a href="#" target="_blank">điều khoản và điều kiện</a> <span class="required">*</span>
+        </label>
+        <div class="error-message" *ngIf="isFieldInvalid('acceptTerms')">
+          {{ getFieldError('acceptTerms') }}
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <button
+        type="submit"
+        class="btn btn-primary"
+        [disabled]="registerForm.invalid || isLoading"
+      >
+        <span *ngIf="!isLoading">Đăng ký</span>
+        <span *ngIf="isLoading" class="loading-text">
+          <span class="spinner"></span>
+          Đang đăng ký...
+        </span>
+      </button>
+
+      <!-- Links -->
+      <div class="auth-links">
+        <a (click)="navigateToLogin()">Đã có tài khoản? Đăng nhập ngay</a>
+      </div>
+    </form>
   </div>
 </div>
