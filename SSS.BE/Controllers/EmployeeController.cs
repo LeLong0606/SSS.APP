@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SSS.BE.Domain.Entities;
 using SSS.BE.Models.Employee;
-using SSS.BE.Persistence;
+using SSS.BE.Services.EmployeeService;
 
 namespace SSS.BE.Controllers;
 
@@ -12,12 +10,12 @@ namespace SSS.BE.Controllers;
 [Authorize]
 public class EmployeeController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IEmployeeService _employeeService;
     private readonly ILogger<EmployeeController> _logger;
 
-    public EmployeeController(ApplicationDbContext context, ILogger<EmployeeController> logger)
+    public EmployeeController(IEmployeeService employeeService, ILogger<EmployeeController> logger)
     {
-        _context = context;
+        _employeeService = employeeService;
         _logger = logger;
     }
 
@@ -32,79 +30,8 @@ public class EmployeeController : ControllerBase
         [FromQuery] int? departmentId = null,
         [FromQuery] bool? isTeamLeader = null)
     {
-        try
-        {
-            var query = _context.Employees
-                .Include(e => e.Department)
-                .AsQueryable();
-
-            // Apply filters
-            if (!string.IsNullOrEmpty(search))
-            {
-                query = query.Where(e => e.FullName.Contains(search) || 
-                                        e.EmployeeCode.Contains(search) ||
-                                        (e.Position != null && e.Position.Contains(search)));
-            }
-
-            if (departmentId.HasValue)
-            {
-                query = query.Where(e => e.DepartmentId == departmentId.Value);
-            }
-
-            if (isTeamLeader.HasValue)
-            {
-                query = query.Where(e => e.IsTeamLeader == isTeamLeader.Value);
-            }
-
-            // Only show active employees by default
-            query = query.Where(e => e.IsActive);
-
-            var totalCount = await query.CountAsync();
-            
-            var employees = await query
-                .OrderBy(e => e.EmployeeCode)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .Select(e => new EmployeeDto
-                {
-                    Id = e.Id,
-                    EmployeeCode = e.EmployeeCode,
-                    FullName = e.FullName,
-                    Position = e.Position,
-                    PhoneNumber = e.PhoneNumber,
-                    Address = e.Address,
-                    HireDate = e.HireDate,
-                    Salary = e.Salary,
-                    IsActive = e.IsActive,
-                    IsTeamLeader = e.IsTeamLeader,
-                    CreatedAt = e.CreatedAt,
-                    UpdatedAt = e.UpdatedAt,
-                    DepartmentId = e.DepartmentId,
-                    DepartmentName = e.Department != null ? e.Department.Name : null,
-                    DepartmentCode = e.Department != null ? e.Department.DepartmentCode : null
-                })
-                .ToListAsync();
-
-            return Ok(new PagedResponse<EmployeeDto>
-            {
-                Success = true,
-                Message = "Employees retrieved successfully",
-                Data = employees,
-                TotalCount = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving employees");
-            return StatusCode(500, new PagedResponse<EmployeeDto>
-            {
-                Success = false,
-                Message = "An error occurred while retrieving employees",
-                Errors = new List<string> { "Please try again later" }
-            });
-        }
+        var result = await _employeeService.GetEmployeesAsync(pageNumber, pageSize, search, departmentId, isTeamLeader);
+        return Ok(result);
     }
 
     /// <summary>
@@ -113,56 +40,38 @@ public class EmployeeController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetEmployee(int id)
     {
-        try
+        var result = await _employeeService.GetEmployeeByIdAsync(id);
+        
+        if (!result.Success || result.Data == null)
         {
-            var employee = await _context.Employees
-                .Include(e => e.Department)
-                .Where(e => e.Id == id)
-                .Select(e => new EmployeeDto
-                {
-                    Id = e.Id,
-                    EmployeeCode = e.EmployeeCode,
-                    FullName = e.FullName,
-                    Position = e.Position,
-                    PhoneNumber = e.PhoneNumber,
-                    Address = e.Address,
-                    HireDate = e.HireDate,
-                    Salary = e.Salary,
-                    IsActive = e.IsActive,
-                    IsTeamLeader = e.IsTeamLeader,
-                    CreatedAt = e.CreatedAt,
-                    UpdatedAt = e.UpdatedAt,
-                    DepartmentId = e.DepartmentId,
-                    DepartmentName = e.Department != null ? e.Department.Name : null,
-                    DepartmentCode = e.Department != null ? e.Department.DepartmentCode : null
-                })
-                .FirstOrDefaultAsync();
-
-            if (employee == null)
-            {
-                return NotFound(new ApiResponse<EmployeeDto>
-                {
-                    Success = false,
-                    Message = "Employee not found"
-                });
-            }
-
-            return Ok(new ApiResponse<EmployeeDto>
-            {
-                Success = true,
-                Message = "Employee retrieved successfully",
-                Data = employee
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving employee {EmployeeId}", id);
-            return StatusCode(500, new ApiResponse<EmployeeDto>
+            return NotFound(new ApiResponse<EmployeeDto>
             {
                 Success = false,
-                Message = "An error occurred while retrieving employee"
+                Message = "Employee not found"
             });
         }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get employee by employee code (All authenticated users can view)
+    /// </summary>
+    [HttpGet("code/{employeeCode}")]
+    public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetEmployeeByCode(string employeeCode)
+    {
+        var result = await _employeeService.GetEmployeeByCodeAsync(employeeCode);
+        
+        if (!result.Success || result.Data == null)
+        {
+            return NotFound(new ApiResponse<EmployeeDto>
+            {
+                Success = false,
+                Message = "Employee not found"
+            });
+        }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -174,127 +83,24 @@ public class EmployeeController : ControllerBase
     {
         try
         {
-            // Check if employee code already exists
-            var existingEmployee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.EmployeeCode == request.EmployeeCode);
+            var result = await _employeeService.CreateEmployeeAsync(request);
             
-            if (existingEmployee != null)
+            if (!result.Success)
             {
-                return BadRequest(new ApiResponse<EmployeeDto>
-                {
-                    Success = false,
-                    Message = "Employee code already exists",
-                    Errors = new List<string> { "This employee code is already in use" }
-                });
+                return BadRequest(result);
             }
-
-            // Validate department if provided
-            if (request.DepartmentId.HasValue)
-            {
-                var department = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == request.DepartmentId.Value && d.IsActive);
-                
-                if (department == null)
-                {
-                    return BadRequest(new ApiResponse<EmployeeDto>
-                    {
-                        Success = false,
-                        Message = "Invalid department",
-                        Errors = new List<string> { "Department not found or inactive" }
-                    });
-                }
-
-                // Check if trying to set as team leader when department already has one
-                if (request.IsTeamLeader)
-                {
-                    var existingTeamLeader = await _context.Employees
-                        .FirstOrDefaultAsync(e => e.DepartmentId == request.DepartmentId.Value && 
-                                                 e.IsTeamLeader && e.IsActive);
-                    
-                    if (existingTeamLeader != null)
-                    {
-                        return BadRequest(new ApiResponse<EmployeeDto>
-                        {
-                            Success = false,
-                            Message = "Department already has a team leader",
-                            Errors = new List<string> { $"Employee {existingTeamLeader.EmployeeCode} is already the team leader for this department" }
-                        });
-                    }
-                }
-            }
-
-            var employee = new Employee
-            {
-                EmployeeCode = request.EmployeeCode,
-                FullName = request.FullName,
-                Position = request.Position,
-                PhoneNumber = request.PhoneNumber,
-                Address = request.Address,
-                HireDate = request.HireDate,
-                Salary = request.Salary,
-                DepartmentId = request.DepartmentId,
-                IsTeamLeader = request.IsTeamLeader,
-                CreatedAt = DateTime.UtcNow,
-                IsActive = true
-            };
-
-            _context.Employees.Add(employee);
-            await _context.SaveChangesAsync();
-
-            // Update department team leader if this employee is set as team leader
-            if (request.IsTeamLeader && request.DepartmentId.HasValue)
-            {
-                var department = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == request.DepartmentId.Value);
-                
-                if (department != null)
-                {
-                    department.TeamLeaderId = employee.EmployeeCode;
-                    department.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
-                }
-            }
-
-            // Load the created employee with department info
-            var createdEmployee = await _context.Employees
-                .Include(e => e.Department)
-                .Where(e => e.Id == employee.Id)
-                .Select(e => new EmployeeDto
-                {
-                    Id = e.Id,
-                    EmployeeCode = e.EmployeeCode,
-                    FullName = e.FullName,
-                    Position = e.Position,
-                    PhoneNumber = e.PhoneNumber,
-                    Address = e.Address,
-                    HireDate = e.HireDate,
-                    Salary = e.Salary,
-                    IsActive = e.IsActive,
-                    IsTeamLeader = e.IsTeamLeader,
-                    CreatedAt = e.CreatedAt,
-                    UpdatedAt = e.UpdatedAt,
-                    DepartmentId = e.DepartmentId,
-                    DepartmentName = e.Department != null ? e.Department.Name : null,
-                    DepartmentCode = e.Department != null ? e.Department.DepartmentCode : null
-                })
-                .FirstAsync();
 
             _logger.LogInformation("Employee {EmployeeCode} created successfully", request.EmployeeCode);
 
-            return CreatedAtAction(nameof(GetEmployee), new { id = employee.Id }, new ApiResponse<EmployeeDto>
-            {
-                Success = true,
-                Message = "Employee created successfully",
-                Data = createdEmployee
-            });
+            return CreatedAtAction(nameof(GetEmployee), new { id = result.Data!.Id }, result);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Error creating employee {EmployeeCode}", request.EmployeeCode);
-            return StatusCode(500, new ApiResponse<EmployeeDto>
+            return BadRequest(new ApiResponse<EmployeeDto>
             {
                 Success = false,
-                Message = "An error occurred while creating employee"
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
             });
         }
     }
@@ -308,136 +114,33 @@ public class EmployeeController : ControllerBase
     {
         try
         {
-            var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.Id == id);
+            var result = await _employeeService.UpdateEmployeeAsync(id, request);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
 
-            if (employee == null)
+            _logger.LogInformation("Employee {EmployeeId} updated successfully", id);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
             {
                 return NotFound(new ApiResponse<EmployeeDto>
                 {
                     Success = false,
-                    Message = "Employee not found"
+                    Message = ex.Message
                 });
             }
 
-            // Validate department if provided
-            if (request.DepartmentId.HasValue)
-            {
-                var department = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == request.DepartmentId.Value && d.IsActive);
-                
-                if (department == null)
-                {
-                    return BadRequest(new ApiResponse<EmployeeDto>
-                    {
-                        Success = false,
-                        Message = "Invalid department",
-                        Errors = new List<string> { "Department not found or inactive" }
-                    });
-                }
-
-                // Check team leader constraints
-                if (request.IsTeamLeader)
-                {
-                    var existingTeamLeader = await _context.Employees
-                        .FirstOrDefaultAsync(e => e.DepartmentId == request.DepartmentId.Value && 
-                                                 e.IsTeamLeader && e.IsActive && e.Id != id);
-                    
-                    if (existingTeamLeader != null)
-                    {
-                        return BadRequest(new ApiResponse<EmployeeDto>
-                        {
-                            Success = false,
-                            Message = "Department already has a team leader",
-                            Errors = new List<string> { $"Employee {existingTeamLeader.EmployeeCode} is already the team leader for this department" }
-                        });
-                    }
-                }
-            }
-
-            // Handle team leader changes
-            var wasTeamLeader = employee.IsTeamLeader;
-            var oldDepartmentId = employee.DepartmentId;
-
-            // Update employee properties
-            employee.FullName = request.FullName;
-            employee.Position = request.Position;
-            employee.PhoneNumber = request.PhoneNumber;
-            employee.Address = request.Address;
-            employee.HireDate = request.HireDate;
-            employee.Salary = request.Salary;
-            employee.DepartmentId = request.DepartmentId;
-            employee.IsTeamLeader = request.IsTeamLeader;
-            employee.IsActive = request.IsActive;
-            employee.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            // Update department team leader references
-            if (wasTeamLeader && oldDepartmentId.HasValue)
-            {
-                var oldDepartment = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == oldDepartmentId.Value);
-                if (oldDepartment != null && oldDepartment.TeamLeaderId == employee.EmployeeCode)
-                {
-                    oldDepartment.TeamLeaderId = null;
-                    oldDepartment.UpdatedAt = DateTime.UtcNow;
-                }
-            }
-
-            if (request.IsTeamLeader && request.DepartmentId.HasValue)
-            {
-                var newDepartment = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == request.DepartmentId.Value);
-                if (newDepartment != null)
-                {
-                    newDepartment.TeamLeaderId = employee.EmployeeCode;
-                    newDepartment.UpdatedAt = DateTime.UtcNow;
-                }
-            }
-
-            await _context.SaveChangesAsync();
-
-            // Return updated employee
-            var updatedEmployee = await _context.Employees
-                .Include(e => e.Department)
-                .Where(e => e.Id == id)
-                .Select(e => new EmployeeDto
-                {
-                    Id = e.Id,
-                    EmployeeCode = e.EmployeeCode,
-                    FullName = e.FullName,
-                    Position = e.Position,
-                    PhoneNumber = e.PhoneNumber,
-                    Address = e.Address,
-                    HireDate = e.HireDate,
-                    Salary = e.Salary,
-                    IsActive = e.IsActive,
-                    IsTeamLeader = e.IsTeamLeader,
-                    CreatedAt = e.CreatedAt,
-                    UpdatedAt = e.UpdatedAt,
-                    DepartmentId = e.DepartmentId,
-                    DepartmentName = e.Department != null ? e.Department.Name : null,
-                    DepartmentCode = e.Department != null ? e.Department.DepartmentCode : null
-                })
-                .FirstAsync();
-
-            _logger.LogInformation("Employee {EmployeeCode} updated successfully", employee.EmployeeCode);
-
-            return Ok(new ApiResponse<EmployeeDto>
-            {
-                Success = true,
-                Message = "Employee updated successfully",
-                Data = updatedEmployee
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating employee {EmployeeId}", id);
-            return StatusCode(500, new ApiResponse<EmployeeDto>
+            return BadRequest(new ApiResponse<EmployeeDto>
             {
                 Success = false,
-                Message = "An error occurred while updating employee"
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
             });
         }
     }
@@ -451,109 +154,23 @@ public class EmployeeController : ControllerBase
     {
         try
         {
-            var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (employee == null)
+            var result = await _employeeService.DeleteEmployeeAsync(id);
+            
+            if (!result.Success)
             {
-                return NotFound(new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Employee not found"
-                });
+                return BadRequest(result);
             }
 
-            // Handle team leader removal
-            if (employee.IsTeamLeader && employee.DepartmentId.HasValue)
-            {
-                var department = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == employee.DepartmentId.Value);
-                if (department != null && department.TeamLeaderId == employee.EmployeeCode)
-                {
-                    department.TeamLeaderId = null;
-                    department.UpdatedAt = DateTime.UtcNow;
-                }
-            }
+            _logger.LogInformation("Employee {EmployeeId} deleted successfully", id);
 
-            employee.IsActive = false;
-            employee.IsTeamLeader = false;
-            employee.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation("Employee {EmployeeCode} deleted successfully", employee.EmployeeCode);
-
-            return Ok(new ApiResponse<object>
-            {
-                Success = true,
-                Message = "Employee deleted successfully"
-            });
+            return Ok(result);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Error deleting employee {EmployeeId}", id);
-            return StatusCode(500, new ApiResponse<object>
+            return NotFound(new ApiResponse<object>
             {
                 Success = false,
-                Message = "An error occurred while deleting employee"
-            });
-        }
-    }
-
-    /// <summary>
-    /// Get employee by employee code (All authenticated users can view)
-    /// </summary>
-    [HttpGet("code/{employeeCode}")]
-    public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetEmployeeByCode(string employeeCode)
-    {
-        try
-        {
-            var employee = await _context.Employees
-                .Include(e => e.Department)
-                .Where(e => e.EmployeeCode == employeeCode && e.IsActive)
-                .Select(e => new EmployeeDto
-                {
-                    Id = e.Id,
-                    EmployeeCode = e.EmployeeCode,
-                    FullName = e.FullName,
-                    Position = e.Position,
-                    PhoneNumber = e.PhoneNumber,
-                    Address = e.Address,
-                    HireDate = e.HireDate,
-                    Salary = e.Salary,
-                    IsActive = e.IsActive,
-                    IsTeamLeader = e.IsTeamLeader,
-                    CreatedAt = e.CreatedAt,
-                    UpdatedAt = e.UpdatedAt,
-                    DepartmentId = e.DepartmentId,
-                    DepartmentName = e.Department != null ? e.Department.Name : null,
-                    DepartmentCode = e.Department != null ? e.Department.DepartmentCode : null
-                })
-                .FirstOrDefaultAsync();
-
-            if (employee == null)
-            {
-                return NotFound(new ApiResponse<EmployeeDto>
-                {
-                    Success = false,
-                    Message = "Employee not found"
-                });
-            }
-
-            return Ok(new ApiResponse<EmployeeDto>
-            {
-                Success = true,
-                Message = "Employee retrieved successfully",
-                Data = employee
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving employee {EmployeeCode}", employeeCode);
-            return StatusCode(500, new ApiResponse<EmployeeDto>
-            {
-                Success = false,
-                Message = "An error occurred while retrieving employee"
+                Message = ex.Message
             });
         }
     }
@@ -567,52 +184,23 @@ public class EmployeeController : ControllerBase
     {
         try
         {
-            var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (employee == null)
+            var result = await _employeeService.ToggleEmployeeStatusAsync(id, isActive);
+            
+            if (!result.Success)
             {
-                return NotFound(new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Employee not found"
-                });
+                return BadRequest(result);
             }
 
-            employee.IsActive = isActive;
-            employee.UpdatedAt = DateTime.UtcNow;
+            _logger.LogInformation("Employee {EmployeeId} status changed to {Status}", id, isActive ? "Active" : "Inactive");
 
-            // If deactivating and employee is a team leader, remove team leader status
-            if (!isActive && employee.IsTeamLeader && employee.DepartmentId.HasValue)
-            {
-                var department = await _context.Departments
-                    .FirstOrDefaultAsync(d => d.Id == employee.DepartmentId.Value);
-                if (department != null && department.TeamLeaderId == employee.EmployeeCode)
-                {
-                    department.TeamLeaderId = null;
-                    department.UpdatedAt = DateTime.UtcNow;
-                }
-                employee.IsTeamLeader = false;
-            }
-
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation("Employee {EmployeeCode} status changed to {Status}", 
-                employee.EmployeeCode, isActive ? "Active" : "Inactive");
-
-            return Ok(new ApiResponse<object>
-            {
-                Success = true,
-                Message = $"Employee {(isActive ? "activated" : "deactivated")} successfully"
-            });
+            return Ok(result);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Error changing employee status {EmployeeId}", id);
-            return StatusCode(500, new ApiResponse<object>
+            return NotFound(new ApiResponse<object>
             {
                 Success = false,
-                Message = "An error occurred while changing employee status"
+                Message = ex.Message
             });
         }
     }

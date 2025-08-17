@@ -1,11 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SSS.BE.Infrastructure.Auth;
-using SSS.BE.Infrastructure.Identity;
 using SSS.BE.Models.Auth;
-using System.IdentityModel.Tokens.Jwt;
+using SSS.BE.Services.AuthService;
 using System.Security.Claims;
 
 namespace SSS.BE.Controllers;
@@ -14,35 +10,12 @@ namespace SSS.BE.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly RoleManager<IdentityRole> _roleManager;
-    private readonly IJwtTokenService _jwtTokenService;
-    private readonly ITokenRevocationService _tokenRevocationService;
+    private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
 
-    // 4 basic roles in English
-    private readonly string[] _availableRoles = 
+    public AuthController(IAuthService authService, ILogger<AuthController> logger)
     {
-        "Administrator",
-        "Director", 
-        "TeamLeader",
-        "Employee"
-    };
-
-    public AuthController(
-        UserManager<ApplicationUser> userManager,
-        SignInManager<ApplicationUser> signInManager,
-        RoleManager<IdentityRole> roleManager,
-        IJwtTokenService jwtTokenService,
-        ITokenRevocationService tokenRevocationService,
-        ILogger<AuthController> logger)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _roleManager = roleManager;
-        _jwtTokenService = jwtTokenService;
-        _tokenRevocationService = tokenRevocationService;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -51,109 +24,21 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("register")]
     [AllowAnonymous]
+    [Consumes("application/json")]
+    [Produces("application/json")]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
     {
-        try
+        var result = await _authService.RegisterAsync(request);
+        
+        if (!result.Success)
         {
-            // Validate role
-            if (!_availableRoles.Contains(request.Role))
-            {
-                return BadRequest(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Invalid role",
-                    Errors = new List<string> { $"Role must be one of: {string.Join(", ", _availableRoles)}" }
-                });
-            }
-
-            // Check if user already exists
-            var existingUser = await _userManager.FindByEmailAsync(request.Email);
-            if (existingUser != null)
-            {
-                return BadRequest(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Email already in use",
-                    Errors = new List<string> { "This email is already registered" }
-                });
-            }
-
-            // Check if EmployeeCode already exists (if provided)
-            if (!string.IsNullOrEmpty(request.EmployeeCode))
-            {
-                var existingUserByCode = await _userManager.Users
-                    .FirstOrDefaultAsync(u => u.EmployeeCode == request.EmployeeCode);
-                if (existingUserByCode != null)
-                {
-                    return BadRequest(new AuthResponse
-                    {
-                        Success = false,
-                        Message = "Employee code already in use",
-                        Errors = new List<string> { "This employee code already exists" }
-                    });
-                }
-            }
-
-            // Create new user
-            var user = new ApplicationUser
-            {
-                UserName = request.Email,
-                Email = request.Email,
-                FullName = request.FullName,
-                EmployeeCode = request.EmployeeCode,
-                CreatedAt = DateTime.UtcNow,
-                IsActive = true
-            };
-
-            var result = await _userManager.CreateAsync(user, request.Password);
-            if (!result.Succeeded)
-            {
-                return BadRequest(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Registration failed",
-                    Errors = result.Errors.Select(e => e.Description).ToList()
-                });
-            }
-
-            // Add role to user
-            await _userManager.AddToRoleAsync(user, request.Role);
-
-            // Generate JWT token
-            var roles = await _userManager.GetRolesAsync(user);
-            var token = await _jwtTokenService.GenerateTokenAsync(user, roles);
-
-            _logger.LogInformation("User {Email} registered successfully with role {Role}", 
-                request.Email, request.Role);
-
-            return Ok(new AuthResponse
-            {
-                Success = true,
-                Message = "Registration successful",
-                Token = token,
-                ExpiresAt = DateTime.UtcNow.AddHours(24),
-                User = new UserInfo
-                {
-                    Id = user.Id,
-                    Email = user.Email!,
-                    FullName = user.FullName!,
-                    EmployeeCode = user.EmployeeCode,
-                    Roles = roles.ToList(),
-                    IsActive = user.IsActive,
-                    CreatedAt = user.CreatedAt
-                }
-            });
+            return BadRequest(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during registration for {Email}", request.Email);
-            return StatusCode(500, new AuthResponse
-            {
-                Success = false,
-                Message = "An error occurred during registration",
-                Errors = new List<string> { "Please try again later" }
-            });
-        }
+
+        _logger.LogInformation("User {Email} registered successfully with role {Role}", 
+            request.Email, request.Role);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -161,103 +46,49 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
+    [Consumes("application/json")]
+    [Produces("application/json")]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
-        try
+        var result = await _authService.LoginAsync(request);
+        
+        if (!result.Success)
         {
-            var user = await _userManager.FindByEmailAsync(request.Email);
-            if (user == null || !user.IsActive)
-            {
-                return Unauthorized(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Invalid email or password"
-                });
-            }
-
-            var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
-            if (!result.Succeeded)
-            {
-                var message = result.IsLockedOut ? "Account is locked" :
-                             result.IsNotAllowed ? "Account is not activated" :
-                             "Invalid email or password";
-
-                return Unauthorized(new AuthResponse
-                {
-                    Success = false,
-                    Message = message
-                });
-            }
-
-            // Generate JWT token
-            var roles = await _userManager.GetRolesAsync(user);
-            var token = await _jwtTokenService.GenerateTokenAsync(user, roles);
-
-            _logger.LogInformation("User {Email} logged in successfully", request.Email);
-
-            return Ok(new AuthResponse
-            {
-                Success = true,
-                Message = "Login successful",
-                Token = token,
-                ExpiresAt = DateTime.UtcNow.AddHours(24),
-                User = new UserInfo
-                {
-                    Id = user.Id,
-                    Email = user.Email!,
-                    FullName = user.FullName!,
-                    EmployeeCode = user.EmployeeCode,
-                    Roles = roles.ToList(),
-                    IsActive = user.IsActive,
-                    CreatedAt = user.CreatedAt
-                }
-            });
+            return Unauthorized(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during login for {Email}", request.Email);
-            return StatusCode(500, new AuthResponse
-            {
-                Success = false,
-                Message = "An error occurred during login",
-                Errors = new List<string> { "Please try again later" }
-            });
-        }
+
+        _logger.LogInformation("User {Email} logged in successfully", request.Email);
+
+        return Ok(result);
     }
 
     /// <summary>
-    /// Logout and revoke token
+    /// Logout and revoke token (No request body required)
     /// </summary>
     [HttpPost("logout")]
     [Authorize]
+    [Produces("application/json")]
     public ActionResult<AuthResponse> Logout()
     {
         try
         {
-            var jti = User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
-            if (!string.IsNullOrEmpty(jti))
-            {
-                _tokenRevocationService.RevokeToken(jti);
-            }
+            var result = _authService.LogoutAsync(User).Result;
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                         User.FindFirst("UserId")?.Value;
 
-            _logger.LogInformation("User {UserId} logged out", userId);
+            _logger.LogInformation("User {UserId} logged out successfully", userId);
 
-            return Ok(new AuthResponse
-            {
-                Success = true,
-                Message = "Logout successful"
-            });
+            return Ok(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during logout");
-            return StatusCode(500, new AuthResponse
-            {
-                Success = false,
-                Message = "An error occurred during logout"
+            
+            return Ok(new AuthResponse 
+            { 
+                Success = true, 
+                Message = "Logout completed"
             });
         }
     }
@@ -267,59 +98,21 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("me")]
     [Authorize]
+    [Produces("application/json")]
     public async Task<ActionResult<AuthResponse>> GetCurrentUser()
     {
-        try
+        var result = await _authService.GetCurrentUserAsync(User);
+        
+        if (!result.Success)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
-                        User.FindFirst("UserId")?.Value;
-
-            if (string.IsNullOrEmpty(userId))
+            if (result.Message.Contains("Invalid token"))
             {
-                return Unauthorized(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Invalid token"
-                });
+                return Unauthorized(result);
             }
-
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null || !user.IsActive)
-            {
-                return NotFound(new AuthResponse
-                {
-                    Success = false,
-                    Message = "User not found or deactivated"
-                });
-            }
-
-            var roles = await _userManager.GetRolesAsync(user);
-
-            return Ok(new AuthResponse
-            {
-                Success = true,
-                Message = "User information retrieved successfully",
-                User = new UserInfo
-                {
-                    Id = user.Id,
-                    Email = user.Email!,
-                    FullName = user.FullName!,
-                    EmployeeCode = user.EmployeeCode,
-                    Roles = roles.ToList(),
-                    IsActive = user.IsActive,
-                    CreatedAt = user.CreatedAt
-                }
-            });
+            return NotFound(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user information");
-            return StatusCode(500, new AuthResponse
-            {
-                Success = false,
-                Message = "An error occurred while retrieving user information"
-            });
-        }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -327,63 +120,31 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("change-password")]
     [Authorize]
+    [Consumes("application/json")]
+    [Produces("application/json")]
     public async Task<ActionResult<AuthResponse>> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        try
+        var result = await _authService.ChangePasswordAsync(User, request);
+        
+        if (!result.Success)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
-                        User.FindFirst("UserId")?.Value;
-
-            if (string.IsNullOrEmpty(userId))
+            if (result.Message.Contains("Invalid token"))
             {
-                return Unauthorized(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Invalid token"
-                });
+                return Unauthorized(result);
             }
-
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
+            if (result.Message.Contains("not found"))
             {
-                return NotFound(new AuthResponse
-                {
-                    Success = false,
-                    Message = "User not found"
-                });
+                return NotFound(result);
             }
-
-            var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
-            if (!result.Succeeded)
-            {
-                return BadRequest(new AuthResponse
-                {
-                    Success = false,
-                    Message = "Password change failed",
-                    Errors = result.Errors.Select(e => e.Description).ToList()
-                });
-            }
-
-            // Revoke all existing tokens for this user
-            await _tokenRevocationService.RevokeAllUserTokensAsync(userId);
-
-            _logger.LogInformation("User {UserId} changed password successfully", userId);
-
-            return Ok(new AuthResponse
-            {
-                Success = true,
-                Message = "Password changed successfully. Please login again."
-            });
+            return BadRequest(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error changing password");
-            return StatusCode(500, new AuthResponse
-            {
-                Success = false,
-                Message = "An error occurred while changing password"
-            });
-        }
+
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                    User.FindFirst("UserId")?.Value;
+
+        _logger.LogInformation("User {UserId} changed password successfully", userId);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -391,9 +152,11 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("roles")]
     [Authorize(Roles = "Administrator,Director")]
-    public ActionResult<IEnumerable<string>> GetAvailableRoles()
+    [Produces("application/json")]
+    public async Task<ActionResult<IEnumerable<string>>> GetAvailableRoles()
     {
-        return Ok(_availableRoles);
+        var roles = await _authService.GetAvailableRolesAsync();
+        return Ok(roles);
     }
 
     /// <summary>
@@ -401,6 +164,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("test/admin")]
     [Authorize(Roles = "Administrator")]
+    [Produces("application/json")]
     public IActionResult TestAdminOnly()
     {
         return Ok(new { 
@@ -415,6 +179,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("test/director")]
     [Authorize(Roles = "Director")]
+    [Produces("application/json")]
     public IActionResult TestDirectorOnly()
     {
         return Ok(new { 
@@ -429,6 +194,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("test/teamleader")]
     [Authorize(Roles = "TeamLeader")]
+    [Produces("application/json")]
     public IActionResult TestTeamLeaderOnly()
     {
         return Ok(new { 
@@ -443,6 +209,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("test/employee")]
     [Authorize(Roles = "Employee")]
+    [Produces("application/json")]
     public IActionResult TestEmployeeOnly()
     {
         return Ok(new { 
@@ -457,6 +224,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("test/admin-director")]
     [Authorize(Roles = "Administrator,Director")]
+    [Produces("application/json")]
     public IActionResult TestAdminOrDirector()
     {
         var userRoles = User.Claims.Where(c => c.Type == "role").Select(c => c.Value).ToList();
@@ -472,6 +240,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("test/management")]
     [Authorize(Roles = "Administrator,Director,TeamLeader")]
+    [Produces("application/json")]
     public IActionResult TestManagementRoles()
     {
         var userRoles = User.Claims.Where(c => c.Type == "role").Select(c => c.Value).ToList();
