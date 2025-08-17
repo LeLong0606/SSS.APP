@@ -1,0 +1,6 @@
+@SSS.BE_HostAddress = http://localhost:5128
+
+GET {{SSS.BE_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

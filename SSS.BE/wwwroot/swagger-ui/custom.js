@@ -1,0 +1,1 @@
+/* Remove this file - no custom JS needed for default Swagger */
