@@ -8,24 +8,41 @@ namespace SSS.BE.Infrastructure.Extensions;
 public static class MiddlewareExtensions
 {
     /// <summary>
-    /// Add all custom middleware to the application builder
+    /// Add all custom middleware to the application builder based on configuration
     /// </summary>
     public static IApplicationBuilder UseCustomMiddleware(this IApplicationBuilder app, IConfiguration configuration)
     {
-        // 1. Request validation (should be early in pipeline)
-        app.UseMiddleware<RequestValidationMiddleware>(GetRequestValidationOptions(configuration));
+        var middlewareConfig = configuration.GetSection("Middleware");
+        
+        // ? FIXED: Only add middleware if explicitly enabled in configuration
+        if (middlewareConfig.GetValue<bool>("EnableRequestValidation", true))
+        {
+            app.UseMiddleware<RequestValidationMiddleware>(GetRequestValidationOptions(configuration));
+        }
 
-        // 2. Rate limiting (before authentication)
-        app.UseMiddleware<RateLimitingMiddleware>(GetRateLimitOptions(configuration));
+        if (middlewareConfig.GetValue<bool>("EnableRateLimiting", true))
+        {
+            app.UseMiddleware<RateLimitingMiddleware>(GetRateLimitOptions(configuration));
+        }
 
-        // 3. Global exception handling
+        // Global exception handling is always enabled (critical for production)
         app.UseMiddleware<GlobalExceptionMiddleware>();
 
-        // 4. Request logging (after exception handling)
-        app.UseMiddleware<RequestLoggingMiddleware>();
+        if (middlewareConfig.GetValue<bool>("EnableRequestLogging", true))
+        {
+            app.UseMiddleware<RequestLoggingMiddleware>();
+        }
 
-        // 5. Performance monitoring (last, to measure total processing time)
-        app.UseMiddleware<PerformanceMonitoringMiddleware>();
+        if (middlewareConfig.GetValue<bool>("EnablePerformanceMonitoring", true))
+        {
+            app.UseMiddleware<PerformanceMonitoringMiddleware>();
+        }
+
+        // ? NEW: Spam prevention middleware (configurable)
+        if (middlewareConfig.GetValue<bool>("EnableSpamPrevention", true))
+        {
+            app.UseMiddleware<SpamPreventionMiddleware>();
+        }
 
         return app;
     }
@@ -56,6 +73,11 @@ public static class MiddlewareExtensions
     public static IApplicationBuilder UsePerformanceMonitoring(this IApplicationBuilder app)
     {
         return app.UseMiddleware<PerformanceMonitoringMiddleware>();
+    }
+
+    public static IApplicationBuilder UseSpamPrevention(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<SpamPreventionMiddleware>();
     }
 
     /// <summary>

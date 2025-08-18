@@ -330,7 +330,8 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
       return 'Chưa xác định';
     }
     
-    const roleNames = {
+    // ✅ FIX: Add index signature to handle string keys
+    const roleNames: { [key: string]: string } = {
       [UserRole.ADMINISTRATOR]: 'Quản trị viên',
       [UserRole.DIRECTOR]: 'Giám đốc',
       [UserRole.TEAM_LEADER]: 'Trưởng nhóm',
@@ -338,7 +339,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     };
     
     return this.currentUser.roles
-      .map(role => roleNames[role] || role)
+      .map((role: string) => roleNames[role] || role)
       .join(', ');
   }
 

@@ -2,6 +2,7 @@ using SSS.BE.Models.Employee;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace SSS.BE.Infrastructure.Middleware;
 
@@ -14,14 +15,27 @@ public class RequestValidationMiddleware
     private readonly ILogger<RequestValidationMiddleware> _logger;
     private readonly RequestValidationOptions _options;
 
-    // Common malicious patterns
+    // ? FIXED: More specific malicious patterns that won't match legitimate HTTP headers
     private static readonly string[] MaliciousPatterns = 
     {
         "<script", "javascript:", "vbscript:", "onload=", "onerror=",
-        "DROP TABLE", "DELETE FROM", "UNION SELECT", "--", "/*",
+        "DROP TABLE", "DELETE FROM", "UNION SELECT", 
         "xp_cmdshell", "sp_executesql", "EXEC(", "EXECUTE(",
         "../", "..\\", "/etc/passwd", "\\windows\\system32",
-        "<?php", "<%", "${", "{{", "eval(", "exec("
+        "<?php", "<%", "eval(", "exec(",
+        "base64_decode", "file_get_contents", "__FILE__", "__DIR__"
+    };
+
+    // ? FIXED: More specific dangerous SQL patterns
+    private static readonly string[] SqlInjectionPatterns = 
+    {
+        @"\b(DROP|ALTER|CREATE)\s+TABLE\b",
+        @"\bDELETE\s+FROM\b",
+        @"\bUNION\s+SELECT\b",
+        @"\bINSERT\s+INTO\b",
+        @"\bUPDATE\s+SET\b",
+        @"--\s",
+        @"/\*.*\*/"
     };
 
     // Suspicious headers that might indicate malicious requests
@@ -102,7 +116,7 @@ public class RequestValidationMiddleware
                 requestId, request.ContentLength, _options.MaxRequestSize);
         }
 
-        // 2. Validate Headers
+        // 2. Validate Headers - ? FIXED: Only check for truly malicious content
         ValidateHeaders(request, result, requestId);
 
         // 3. Validate Query Parameters
@@ -115,7 +129,7 @@ public class RequestValidationMiddleware
             await ValidateRequestBody(request, result, requestId);
         }
 
-        // 5. Validate Content-Type for POST/PUT/PATCH requests (FIXED: only if request has body content)
+        // 5. Validate Content-Type for POST/PUT/PATCH requests
         if ((request.Method == "POST" || request.Method == "PUT" || request.Method == "PATCH"))
         {
             ValidateContentType(request, result, requestId);
@@ -124,21 +138,35 @@ public class RequestValidationMiddleware
         return result;
     }
 
+    // ? FIXED: Improved header validation that doesn't flag legitimate HTTP headers
     private void ValidateHeaders(HttpRequest request, ValidationResult result, string requestId)
     {
-        // Check for suspicious headers
         foreach (var header in request.Headers)
         {
             var headerName = header.Key;
             var headerValues = header.Value.Where(v => v != null).ToArray();
             var headerValue = string.Join(",", headerValues);
 
-            // Check for malicious patterns in header values
-            if (ContainsMaliciousPattern(headerValue))
+            // ? FIX: Skip validation for standard HTTP headers that commonly contain patterns like */*
+            if (IsStandardHttpHeader(headerName))
             {
-                result.AddError($"Malicious pattern detected in header '{headerName}'");
-                _logger.LogWarning("[{RequestId}] Malicious pattern in header {HeaderName}: {HeaderValue}",
-                    requestId, headerName, headerValue);
+                // Only check for extremely dangerous patterns in standard headers
+                if (ContainsExtremelyDangerousPattern(headerValue))
+                {
+                    result.AddError($"Dangerous pattern detected in header '{headerName}'");
+                    _logger.LogWarning("[{RequestId}] Dangerous pattern in header {HeaderName}: {HeaderValue}",
+                        requestId, headerName, headerValue);
+                }
+            }
+            else
+            {
+                // For non-standard headers, apply full validation
+                if (ContainsMaliciousPattern(headerValue))
+                {
+                    result.AddError($"Malicious pattern detected in header '{headerName}'");
+                    _logger.LogWarning("[{RequestId}] Malicious pattern in header {HeaderName}: {HeaderValue}",
+                        requestId, headerName, headerValue);
+                }
             }
 
             // Check for suspicious headers
@@ -155,13 +183,10 @@ public class RequestValidationMiddleware
             }
         }
 
-        // FIXED: Only require Content-Type header when the request actually has content
+        // Only require Content-Type header when the request actually has content
         if (request.Method == "POST" || request.Method == "PUT" || request.Method == "PATCH")
         {
-            // Check if request has body content (ContentLength > 0 or Content-Type is set)
             var hasContent = request.ContentLength > 0 || !string.IsNullOrEmpty(request.ContentType);
-            
-            // Special handling for auth endpoints that don't require body
             var isAuthEndpointWithoutBody = IsAuthEndpointWithoutBody(request.Path, request.Method);
             
             if (_options.RequireContentTypeHeader && !isAuthEndpointWithoutBody && hasContent && string.IsNullOrEmpty(request.ContentType))
@@ -171,9 +196,38 @@ public class RequestValidationMiddleware
         }
     }
 
-    /// <summary>
-    /// Check if this is an auth endpoint that doesn't require a request body
-    /// </summary>
+    // ? NEW: Check if header is a standard HTTP header that should have relaxed validation
+    private bool IsStandardHttpHeader(string headerName)
+    {
+        var standardHeaders = new[]
+        {
+            "Accept", "Accept-Encoding", "Accept-Language", "Accept-Charset",
+            "Authorization", "Content-Type", "Content-Length", "Content-Encoding",
+            "User-Agent", "Referer", "Host", "Origin", "Cache-Control",
+            "Connection", "Upgrade", "Sec-WebSocket-Key", "Sec-WebSocket-Version",
+            "X-Requested-With", "If-Modified-Since", "If-None-Match"
+        };
+
+        return standardHeaders.Any(sh => sh.Equals(headerName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ? NEW: Check for extremely dangerous patterns that shouldn't appear even in standard headers
+    private bool ContainsExtremelyDangerousPattern(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return false;
+
+        var dangerousPatterns = new[]
+        {
+            "<script", "javascript:", "vbscript:", "onload=", "onerror=",
+            "<?php", "<%", "eval(", "exec(",
+            "base64_decode", "file_get_contents"
+        };
+
+        var lowercaseInput = input.ToLowerInvariant();
+        return dangerousPatterns.Any(pattern => lowercaseInput.Contains(pattern.ToLowerInvariant()));
+    }
+
     private bool IsAuthEndpointWithoutBody(string path, string method)
     {
         var authEndpointsWithoutBody = new[]
@@ -259,10 +313,8 @@ public class RequestValidationMiddleware
 
     private void ValidateContentType(HttpRequest request, ValidationResult result, string requestId)
     {
-        // FIXED: Only validate Content-Type if request has content or Content-Type is explicitly provided
         if (string.IsNullOrEmpty(request.ContentType))
         {
-            // If no Content-Type and no content, it's acceptable for certain endpoints
             if (request.ContentLength == 0 || !request.ContentLength.HasValue)
             {
                 return; // Allow requests without body to have no Content-Type
@@ -279,7 +331,6 @@ public class RequestValidationMiddleware
             "text/plain"
         };
 
-        // Only validate if Content-Type is provided
         if (!string.IsNullOrEmpty(contentType) && !allowedContentTypes.Any(ct => contentType.StartsWith(ct)))
         {
             result.AddError($"Content-Type '{request.ContentType}' is not allowed");
@@ -287,13 +338,38 @@ public class RequestValidationMiddleware
         }
     }
 
+    // ? FIXED: More intelligent malicious pattern detection
     private bool ContainsMaliciousPattern(string input)
     {
         if (string.IsNullOrEmpty(input))
             return false;
 
         var lowercaseInput = input.ToLowerInvariant();
-        return MaliciousPatterns.Any(pattern => lowercaseInput.Contains(pattern.ToLowerInvariant()));
+        
+        // Check simple string patterns first
+        if (MaliciousPatterns.Any(pattern => lowercaseInput.Contains(pattern.ToLowerInvariant())))
+        {
+            return true;
+        }
+
+        // Check SQL injection patterns using regex for more precise matching
+        foreach (var pattern in SqlInjectionPatterns)
+        {
+            try
+            {
+                if (Regex.IsMatch(lowercaseInput, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline))
+                {
+                    return true;
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // If regex times out, skip this pattern
+                continue;
+            }
+        }
+
+        return false;
     }
 
     private async Task HandleValidationFailure(HttpContext context, string requestId, ValidationResult validationResult)

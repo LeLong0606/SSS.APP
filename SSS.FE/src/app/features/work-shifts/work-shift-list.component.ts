@@ -158,7 +158,8 @@ export class WorkShiftListComponent implements OnInit, OnDestroy {
     const employeeCode = this.selectedEmployee || undefined;
     const startDate = this.startDate || undefined;
     const endDate = this.endDate || undefined;
-    const locationId = this.selectedLocation || undefined;
+    // ✅ FIX: Convert selectedLocation to number
+    const locationId = this.selectedLocation ? Number(this.selectedLocation) : undefined;
 
     this.workShiftService.getWorkShifts(
       this.currentPage, 
@@ -302,7 +303,8 @@ export class WorkShiftListComponent implements OnInit, OnDestroy {
            shift.createdByEmployeeCode === currentUser.employeeCode;
   }
 
-  getLocationName(locationId: string): string {
+  // ✅ FIX: Change parameter type to number and handle comparison correctly
+  getLocationName(locationId: number): string {
     const location = this.workLocations.find(loc => loc.id === locationId);
     return location ? location.name : 'Không xác định';
   }
@@ -443,8 +445,8 @@ export class WorkShiftListComponent implements OnInit, OnDestroy {
     this.loadEmployees();
   }
 
-  // Track by function for better performance
-  trackByShiftId(index: number, shift: WorkShift): string {
+  // ✅ FIX: Track by function return type should be number (ID type)
+  trackByShiftId(index: number, shift: WorkShift): number {
     return shift.id;
   }
 }

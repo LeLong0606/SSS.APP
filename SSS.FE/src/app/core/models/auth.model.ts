@@ -6,21 +6,21 @@ export enum UserRole {
   EMPLOYEE = 'Employee'
 }
 
-// ✅ FIXED: Login request - EXACT match with backend LoginRequest (NO rememberMe!)
+// Login request - EXACT match with backend LoginRequest (NO rememberMe!)
 export interface LoginRequest {
   email: string;
   password: string;
   // rememberMe removed - backend doesn't support it
 }
 
-// ✅ FIXED: Register request - EXACT match with backend RegisterRequest  
+// Register request - EXACT match with backend RegisterRequest  
 export interface RegisterRequest {
   email: string;
   password: string;
   confirmPassword: string;
   fullName: string;
   employeeCode?: string;
-  role: string; // ✅ FIX: STRING, not UserRole enum to match backend!
+  role: string; // STRING, not UserRole enum to match backend!
 }
 
 // Change password request - EXACT match with backend ChangePasswordRequest
@@ -46,16 +46,18 @@ export interface AuthResponse {
   errors?: string[];
 }
 
-// ✅ FIXED: User information - EXACT match with backend UserInfo
+// User information - EXACT match with backend UserInfo + frontend additions
 export interface UserInfo {
-  id: string; // ✅ FIX: STRING, not number! Backend uses ApplicationUser.Id (GUID)
+  id: string; // STRING, not number! Backend uses ApplicationUser.Id (GUID)
   email: string;
   fullName: string;
   employeeCode?: string;
-  roles: string[]; // ✅ FIX: STRING[], not UserRole[] to match backend List<string>
+  roles: string[]; // STRING[], not UserRole[] to match backend List<string>
   isActive: boolean;
   createdAt: Date;
-  // ✅ FIX: Removed extra fields not in backend (avatar, department, position)
+  
+  // ✅ FIX: Add missing properties used in frontend
+  avatar?: string; // For profile picture
 }
 
 // Current user state
@@ -69,25 +71,25 @@ export interface AuthState {
   error: string | null;
 }
 
-// ✅ FIXED: Login form data - REMOVED rememberMe
+// Login form data - REMOVED rememberMe
 export interface LoginFormData {
   email: string;
   password: string;
-  // ✅ FIX: rememberMe removed
+  // rememberMe removed
 }
 
-// ✅ FIXED: Register form data - role as string
+// Register form data - role as string
 export interface RegisterFormData {
   email: string;
   password: string;
   confirmPassword: string;
   fullName: string;
   employeeCode: string;
-  role: string; // ✅ FIX: STRING to match backend
+  role: string; // STRING to match backend
   acceptTerms: boolean;
 }
 
-// NEW: Revoke token request - EXACT match with backend RevokeTokenRequest
+// Revoke token request - EXACT match with backend RevokeTokenRequest
 export interface RevokeTokenRequest {
   refreshToken?: string;
 }

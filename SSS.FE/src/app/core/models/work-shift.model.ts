@@ -1,10 +1,10 @@
 // Work Shift related interfaces - EXACT match with backend DTOs
 export interface WorkShift {
-  id: number; // ✅ FIX: NUMBER, not string! Backend uses int
+  id: number; // NUMBER, not string! Backend uses int
   employeeCode: string;
   employeeName: string;
   employeeDepartment?: string;
-  workLocationId: number; // ✅ FIX: NUMBER, not string! Backend uses int
+  workLocationId: number; // NUMBER, not string! Backend uses int
   workLocationName: string;
   workLocationCode?: string;
   workLocationAddress?: string;
@@ -23,36 +23,41 @@ export interface WorkShift {
   modifiedByEmployeeName?: string;
   modifiedAt?: Date;
   modificationReason?: string;
+  
+  // ✅ FIX: Add missing properties that templates are using
+  shiftType?: string; // Add shiftType property
+  notes?: string; // Add notes property
+  createdByEmployeeCode?: string; // Add createdByEmployeeCode property
 }
 
-// ✅ FIXED: Create work shift request - EXACT match with backend CreateWorkShiftRequest
+// Create work shift request - EXACT match with backend CreateWorkShiftRequest
 export interface CreateWorkShiftRequest {
   employeeCode: string;
-  workLocationId: number; // ✅ FIX: NUMBER, not string! Backend expects int
-  shiftDate: Date; // ✅ FIX: DATE object, not string! Backend expects DateTime
+  workLocationId: number; // NUMBER, not string! Backend expects int
+  shiftDate: Date; // DATE object, not string! Backend expects DateTime
   startTime: string; // HH:mm format (converted to TimeOnly in backend)
   endTime: string; // HH:mm format (converted to TimeOnly in backend)
 }
 
-// ✅ FIXED: Update work shift request - EXACT match with backend UpdateWorkShiftRequest
+// Update work shift request - EXACT match with backend UpdateWorkShiftRequest
 export interface UpdateWorkShiftRequest {
-  workLocationId: number; // ✅ FIX: NUMBER, not string!
+  workLocationId: number; // NUMBER, not string!
   startTime: string; // TimeOnly format HH:mm
   endTime: string; // TimeOnly format HH:mm
   modificationReason?: string;
 }
 
-// ✅ FIXED: Weekly shift request - EXACT match with backend CreateWeeklyShiftsRequest
+// Weekly shift request - EXACT match with backend CreateWeeklyShiftsRequest
 export interface WeeklyShiftRequest {
   employeeCode: string;
-  weekStartDate: Date; // ✅ FIX: Must be Monday, DATE object not string
+  weekStartDate: Date; // Must be Monday, DATE object not string
   dailyShifts: DailyShiftRequest[];
 }
 
-// ✅ FIXED: Daily shift request - EXACT match with backend DailyShiftRequest
+// Daily shift request - EXACT match with backend DailyShiftRequest
 export interface DailyShiftRequest {
   dayOfWeek: number; // 1=Monday, 7=Sunday (backend expects this format)
-  workLocationId: number; // ✅ FIX: NUMBER, not string!
+  workLocationId: number; // NUMBER, not string!
   startTime: string; // TimeOnly format HH:mm
   endTime: string; // TimeOnly format HH:mm
 }
@@ -87,7 +92,7 @@ export interface ShiftValidationRequest {
   shiftDate: Date;
   startTime: string;
   endTime: string;
-  excludeShiftId?: number; // ✅ FIX: NUMBER, not string!
+  excludeShiftId?: number; // NUMBER, not string!
 }
 
 // Shift validation response - EXACT match with backend ShiftValidationResponse
@@ -103,13 +108,13 @@ export interface WorkShiftFilter {
   employeeCode?: string;
   startDate?: string; // ISO string format for API
   endDate?: string; // ISO string format for API
-  locationId?: number; // ✅ FIX: NUMBER, not string!
+  locationId?: number; // NUMBER, not string!
   isActive?: boolean;
 }
 
 // Utility interfaces for frontend display
 export interface WorkShiftListItem {
-  id: number; // ✅ FIX: NUMBER, not string!
+  id: number; // NUMBER, not string!
   employeeCode: string;
   employeeName: string;
   shiftDate: Date;
@@ -132,7 +137,7 @@ export interface WorkShiftStats {
 }
 
 export interface ShiftCalendarEvent {
-  id: number; // ✅ FIX: NUMBER, not string!
+  id: number; // NUMBER, not string!
   title: string;
   start: Date;
   end: Date;
@@ -160,7 +165,7 @@ export enum ShiftType {
   OVERTIME = 'OVERTIME'
 }
 
-// ✅ FIXED: Day of week to match backend (1=Monday, not 0=Sunday)
+// Day of week to match backend (1=Monday, not 0=Sunday)
 export enum DayOfWeek {
   MONDAY = 1,
   TUESDAY = 2,

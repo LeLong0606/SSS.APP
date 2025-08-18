@@ -1,12 +1,41 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, timer } from 'rxjs';
+import { io, Socket } from 'socket.io-client';
+import { environment } from '../../environments/environment';
 
-export interface NotificationMessage {
+export interface Notification {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  title?: string;
-  message: string;
+  type: 'success' | 'error' | 'warning' | 'info' | 'loading';
+  title: string;
+  message?: string;
   duration?: number;
+  persistent?: boolean;
+  actions?: NotificationAction[];
+  data?: any;
+  timestamp: Date;
+  read: boolean;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  category?: string;
+  icon?: string;
+  image?: string;
+  progress?: number;
+}
+
+export interface NotificationAction {
+  label: string;
+  action: () => void;
+  style?: 'primary' | 'secondary' | 'danger';
+}
+
+export interface ToastNotification {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info' | 'loading';
+  title: string;
+  message?: string;
+  duration: number;
+  persistent: boolean;
+  actions?: NotificationAction[];
+  progress?: number;
   timestamp: Date;
 }
 
@@ -14,78 +43,456 @@ export interface NotificationMessage {
   providedIn: 'root'
 })
 export class NotificationService {
-  private notificationsSubject = new BehaviorSubject<NotificationMessage[]>([]);
+  private notificationsSubject = new BehaviorSubject<Notification[]>([]);
+  private toastsSubject = new BehaviorSubject<ToastNotification[]>([]);
+  private unreadCountSubject = new BehaviorSubject<number>(0);
+  private socket: Socket | null = null;
+  
   public notifications$ = this.notificationsSubject.asObservable();
+  public toasts$ = this.toastsSubject.asObservable();
+  public unreadCount$ = this.unreadCountSubject.asObservable();
 
-  private defaultDuration = 5000; // 5 seconds
+  // Sound notifications
+  private sounds = {
+    success: '/assets/sounds/success.mp3',
+    error: '/assets/sounds/error.mp3',
+    warning: '/assets/sounds/warning.mp3',
+    info: '/assets/sounds/info.mp3',
+    urgent: '/assets/sounds/urgent.mp3'
+  };
 
-  constructor() {}
-
-  // Show success notification
-  showSuccess(message: string, title?: string, duration?: number): void {
-    this.addNotification('success', message, title, duration);
+  constructor() {
+    this.initializeWebSocket();
+    this.loadStoredNotifications();
   }
 
-  // Show error notification
-  showError(message: string, title?: string, duration?: number): void {
-    this.addNotification('error', message, title, duration || 0); // Errors don't auto-dismiss by default
+  // === REAL-TIME WEBSOCKET CONNECTION ===
+  private initializeWebSocket(): void {
+    if (environment.production) {
+      try {
+        this.socket = io(environment.websocketUrl || environment.apiUrl, {
+          transports: ['websocket', 'polling'],
+          timeout: 20000,
+          forceNew: true,
+        });
+
+        this.socket.on('connect', () => {
+          console.log('🔌 Connected to WebSocket server');
+        });
+
+        this.socket.on('notification', (notification: Notification) => {
+          this.addNotification(notification);
+        });
+
+        this.socket.on('system-alert', (alert: Notification) => {
+          alert.priority = 'urgent';
+          this.addNotification(alert);
+          this.playSound('urgent');
+        });
+
+        this.socket.on('disconnect', () => {
+          console.log('🔌 Disconnected from WebSocket server');
+        });
+      } catch (error) {
+        console.warn('WebSocket connection failed:', error);
+      }
+    }
   }
 
-  // Show warning notification
-  showWarning(message: string, title?: string, duration?: number): void {
-    this.addNotification('warning', message, title, duration);
-  }
-
-  // Show info notification
-  showInfo(message: string, title?: string, duration?: number): void {
-    this.addNotification('info', message, title, duration);
-  }
-
-  // Remove specific notification
-  removeNotification(id: string): void {
-    const currentNotifications = this.notificationsSubject.value;
-    const updatedNotifications = currentNotifications.filter(n => n.id !== id);
-    this.notificationsSubject.next(updatedNotifications);
-  }
-
-  // Clear all notifications
-  clearAll(): void {
-    this.notificationsSubject.next([]);
-  }
-
-  // Get current notifications
-  getNotifications(): NotificationMessage[] {
-    return this.notificationsSubject.value;
-  }
-
-  private addNotification(
-    type: NotificationMessage['type'],
-    message: string,
-    title?: string,
-    duration?: number
-  ): void {
-    const notification: NotificationMessage = {
-      id: this.generateId(),
-      type,
+  // === NOTIFICATION METHODS ===
+  
+  /**
+   * Show success notification
+   */
+  showSuccess(title: string, message?: string, options?: Partial<Notification>): string {
+    return this.show({
+      type: 'success',
       title,
       message,
-      duration: duration ?? this.defaultDuration,
-      timestamp: new Date()
+      icon: '✅',
+      duration: 5000,
+      priority: 'normal',
+      ...options
+    });
+  }
+
+  /**
+   * Show error notification
+   */
+  showError(title: string, message?: string, options?: Partial<Notification>): string {
+    return this.show({
+      type: 'error',
+      title,
+      message,
+      icon: '❌',
+      duration: 8000,
+      priority: 'high',
+      persistent: true,
+      ...options
+    });
+  }
+
+  /**
+   * Show warning notification
+   */
+  showWarning(title: string, message?: string, options?: Partial<Notification>): string {
+    return this.show({
+      type: 'warning',
+      title,
+      message,
+      icon: '⚠️',
+      duration: 6000,
+      priority: 'normal',
+      ...options
+    });
+  }
+
+  /**
+   * Show info notification
+   */
+  showInfo(title: string, message?: string, options?: Partial<Notification>): string {
+    return this.show({
+      type: 'info',
+      title,
+      message,
+      icon: 'ℹ️',
+      duration: 5000,
+      priority: 'normal',
+      ...options
+    });
+  }
+
+  /**
+   * Show loading notification with progress
+   */
+  showLoading(title: string, message?: string): string {
+    return this.show({
+      type: 'loading',
+      title,
+      message,
+      icon: '⏳',
+      persistent: true,
+      progress: 0,
+      priority: 'normal'
+    });
+  }
+
+  /**
+   * Update loading notification progress
+   */
+  updateProgress(id: string, progress: number, message?: string): void {
+    const notifications = this.notificationsSubject.value;
+    const notification = notifications.find(n => n.id === id);
+    
+    if (notification) {
+      notification.progress = progress;
+      if (message) notification.message = message;
+      
+      this.notificationsSubject.next([...notifications]);
+      this.updateToastProgress(id, progress);
+    }
+  }
+
+  /**
+   * Complete loading notification
+   */
+  completeLoading(id: string, title: string = 'Completed', message?: string): void {
+    this.hideNotification(id);
+    this.showSuccess(title, message, { duration: 3000 });
+  }
+
+  /**
+   * Show confirmation dialog
+   */
+  async showConfirm(
+    title: string,
+    message: string,
+    confirmText: string = 'Confirm',
+    cancelText: string = 'Cancel'
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const id = this.show({
+        type: 'warning',
+        title,
+        message,
+        persistent: true,
+        icon: '❓',
+        actions: [
+          {
+            label: confirmText,
+            style: 'primary',
+            action: () => {
+              this.hideNotification(id);
+              resolve(true);
+            }
+          },
+          {
+            label: cancelText,
+            style: 'secondary',
+            action: () => {
+              this.hideNotification(id);
+              resolve(false);
+            }
+          }
+        ]
+      });
+    });
+  }
+
+  /**
+   * Show custom notification
+   */
+  show(notification: Partial<Notification>): string {
+    const id = notification.id || this.generateId();
+    
+    const fullNotification: Notification = {
+      id,
+      type: 'info',
+      title: '',
+      duration: 5000,
+      persistent: false,
+      read: false,
+      timestamp: new Date(),
+      priority: 'normal',
+      ...notification
     };
 
-    const currentNotifications = this.notificationsSubject.value;
-    this.notificationsSubject.next([...currentNotifications, notification]);
+    this.addNotification(fullNotification);
+    this.createToast(fullNotification);
+    this.playSound(fullNotification.type);
 
-    // Auto-remove notification after duration (if duration > 0)
-    const finalDuration = notification.duration ?? 0;
-    if (finalDuration > 0) {
-      setTimeout(() => {
-        this.removeNotification(notification.id);
-      }, finalDuration);
+    // Auto-hide if not persistent
+    if (!fullNotification.persistent && fullNotification.duration! > 0) {
+      timer(fullNotification.duration!).subscribe(() => {
+        this.hideNotification(id);
+      });
+    }
+
+    return id;
+  }
+
+  // === MANAGEMENT METHODS ===
+
+  /**
+   * Hide specific notification
+   */
+  hideNotification(id: string): void {
+    const notifications = this.notificationsSubject.value.filter(n => n.id !== id);
+    const toasts = this.toastsSubject.value.filter(t => t.id !== id);
+    
+    this.notificationsSubject.next(notifications);
+    this.toastsSubject.next(toasts);
+    this.updateUnreadCount();
+    this.saveNotifications();
+  }
+
+  /**
+   * Mark notification as read
+   */
+  markAsRead(id: string): void {
+    const notifications = this.notificationsSubject.value.map(n => 
+      n.id === id ? { ...n, read: true } : n
+    );
+    
+    this.notificationsSubject.next(notifications);
+    this.updateUnreadCount();
+    this.saveNotifications();
+  }
+
+  /**
+   * Mark all notifications as read
+   */
+  markAllAsRead(): void {
+    const notifications = this.notificationsSubject.value.map(n => ({ ...n, read: true }));
+    this.notificationsSubject.next(notifications);
+    this.unreadCountSubject.next(0);
+    this.saveNotifications();
+  }
+
+  /**
+   * Clear all notifications
+   */
+  clearAll(): void {
+    this.notificationsSubject.next([]);
+    this.toastsSubject.next([]);
+    this.unreadCountSubject.next(0);
+    localStorage.removeItem('sss_notifications');
+  }
+
+  /**
+   * Clear notifications by type
+   */
+  clearByType(type: Notification['type']): void {
+    const notifications = this.notificationsSubject.value.filter(n => n.type !== type);
+    const toasts = this.toastsSubject.value.filter(t => t.type !== type);
+    
+    this.notificationsSubject.next(notifications);
+    this.toastsSubject.next(toasts);
+    this.updateUnreadCount();
+    this.saveNotifications();
+  }
+
+  /**
+   * Get notifications by category
+   */
+  getByCategory(category: string): Observable<Notification[]> {
+    return new BehaviorSubject(
+      this.notificationsSubject.value.filter(n => n.category === category)
+    ).asObservable();
+  }
+
+  // === PRIVATE METHODS ===
+
+  private addNotification(notification: Notification): void {
+    const notifications = [notification, ...this.notificationsSubject.value];
+    
+    // Limit to 100 notifications to prevent memory issues
+    if (notifications.length > 100) {
+      notifications.splice(100);
+    }
+    
+    this.notificationsSubject.next(notifications);
+    this.updateUnreadCount();
+    this.saveNotifications();
+  }
+
+  private createToast(notification: Notification): void {
+    if (notification.type === 'loading' || notification.persistent) {
+      // Don't create toast for loading or persistent notifications
+      return;
+    }
+
+    const toast: ToastNotification = {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      duration: notification.duration || 5000,
+      persistent: notification.persistent || false,
+      actions: notification.actions,
+      progress: notification.progress,
+      timestamp: notification.timestamp
+    };
+
+    const toasts = [toast, ...this.toastsSubject.value];
+    this.toastsSubject.next(toasts);
+
+    // Auto-remove toast
+    if (!toast.persistent) {
+      timer(toast.duration).subscribe(() => {
+        this.removeToast(toast.id);
+      });
+    }
+  }
+
+  private removeToast(id: string): void {
+    const toasts = this.toastsSubject.value.filter(t => t.id !== id);
+    this.toastsSubject.next(toasts);
+  }
+
+  private updateToastProgress(id: string, progress: number): void {
+    const toasts = this.toastsSubject.value.map(t => 
+      t.id === id ? { ...t, progress } : t
+    );
+    this.toastsSubject.next(toasts);
+  }
+
+  private updateUnreadCount(): void {
+    const unreadCount = this.notificationsSubject.value.filter(n => !n.read).length;
+    this.unreadCountSubject.next(unreadCount);
+  }
+
+  private playSound(type: Notification['type'] | 'urgent'): void {
+    if (!environment.production) return;
+    
+    try {
+      const soundUrl = this.sounds[type as keyof typeof this.sounds];
+      if (soundUrl) {
+        const audio = new Audio(soundUrl);
+        audio.volume = 0.5;
+        audio.play().catch(() => {
+          // Silently fail if sound can't play
+        });
+      }
+    } catch (error) {
+      // Silently fail if sound API not available
     }
   }
 
   private generateId(): string {
-    return 'notification-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+    return `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private saveNotifications(): void {
+    try {
+      const notifications = this.notificationsSubject.value.slice(0, 50); // Save only latest 50
+      localStorage.setItem('sss_notifications', JSON.stringify(notifications));
+    } catch (error) {
+      console.warn('Failed to save notifications to localStorage:', error);
+    }
+  }
+
+  private loadStoredNotifications(): void {
+    try {
+      const stored = localStorage.getItem('sss_notifications');
+      if (stored) {
+        const notifications: Notification[] = JSON.parse(stored);
+        this.notificationsSubject.next(notifications);
+        this.updateUnreadCount();
+      }
+    } catch (error) {
+      console.warn('Failed to load notifications from localStorage:', error);
+    }
+  }
+
+  // === UTILITY METHODS ===
+
+  /**
+   * Get notification statistics
+   */
+  getStats(): {
+    total: number;
+    unread: number;
+    byType: Record<string, number>;
+    byPriority: Record<string, number>;
+  } {
+    const notifications = this.notificationsSubject.value;
+    
+    return {
+      total: notifications.length,
+      unread: notifications.filter(n => !n.read).length,
+      byType: notifications.reduce((acc, n) => {
+        acc[n.type] = (acc[n.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      byPriority: notifications.reduce((acc, n) => {
+        acc[n.priority] = (acc[n.priority] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    };
+  }
+
+  /**
+   * Cleanup old notifications
+   */
+  cleanup(olderThanDays: number = 7): void {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - olderThanDays);
+    
+    const notifications = this.notificationsSubject.value.filter(
+      n => n.timestamp > cutoff
+    );
+    
+    this.notificationsSubject.next(notifications);
+    this.updateUnreadCount();
+    this.saveNotifications();
+  }
+
+  // === LIFECYCLE ===
+  
+  ngOnDestroy(): void {
+    if (this.socket) {
+      this.socket.disconnect();
+    }
   }
 }
