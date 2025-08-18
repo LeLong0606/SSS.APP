@@ -1,7 +1,6 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild } from '@angular/core';
 import { Subject, takeUntil, interval, map } from 'rxjs';
 import { Router } from '@angular/router';
-import { trigger, transition, style, animate, query, stagger, keyframes } from '@angular/animations';
 
 import { AuthService } from '../../core/services/auth.service';
 import { EmployeeService } from '../../core/services/employee.service';
@@ -14,7 +13,8 @@ import { UserInfo, UserRole } from '../../core/models/auth.model';
 import { Employee } from '../../core/models/employee.model';
 import { Department } from '../../core/models/department.model';
 import { WorkShift } from '../../core/models/work-shift.model';
-import { WorkLocation } from '../../core/models/work-location.model';
+
+import { dashboardAnimations } from './dashboard.animations';
 
 export interface DashboardStats {
   totalEmployees: number;
@@ -57,67 +57,13 @@ export interface ActivityItem {
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss'],
-  animations: [
-    // Card entrance animation
-    trigger('cardSlideIn', [
-      transition('* => *', [
-        query(':enter', [
-          style({ opacity: 0, transform: 'translateY(50px) scale(0.8)' }),
-          stagger(100, [
-            animate('600ms cubic-bezier(0.35, 0, 0.25, 1)', 
-              style({ opacity: 1, transform: 'translateY(0) scale(1)' })
-            )
-          ])
-        ], { optional: true })
-      ])
-    ]),
-    
-    // Stats counter animation
-    trigger('counterAnimation', [
-      transition(':enter', [
-        animate('1200ms ease-out', keyframes([
-          style({ transform: 'scale(0.8)', opacity: 0, offset: 0 }),
-          style({ transform: 'scale(1.1)', opacity: 0.8, offset: 0.7 }),
-          style({ transform: 'scale(1)', opacity: 1, offset: 1 })
-        ]))
-      ])
-    ]),
-    
-    // Quick actions hover
-    trigger('actionHover', [
-      transition('idle => hover', [
-        animate('200ms ease-out', 
-          style({ transform: 'translateY(-8px) scale(1.02)' })
-        )
-      ]),
-      transition('hover => idle', [
-        animate('200ms ease-out', 
-          style({ transform: 'translateY(0) scale(1)' })
-        )
-      ])
-    ]),
-    
-    // Activity list animation
-    trigger('listAnimation', [
-      transition('* => *', [
-        query(':enter', [
-          style({ opacity: 0, transform: 'translateX(-50px)' }),
-          stagger(50, [
-            animate('300ms ease-out', 
-              style({ opacity: 1, transform: 'translateX(0)' })
-            )
-          ])
-        ], { optional: true })
-      ])
-    ])
-  ],
+  animations: dashboardAnimations,
   standalone: false
 })
 export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('welcomeSection') welcomeSection!: ElementRef;
   
   private destroy$ = new Subject<void>();
-  private animatedNumbers: { [key: string]: number } = {};
   
   // User and permissions
   currentUser: UserInfo | null = null;
@@ -183,38 +129,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
     },
     {
-      id: 'work-locations',
-      title: 'Địa điểm làm việc',
-      description: 'Quản lý các địa điểm',
-      icon: '📍',
-      route: '/work-locations',
-      color: 'warning',
-      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR]
-    },
-    {
       id: 'profile',
       title: 'Hồ sơ cá nhân',
       description: 'Xem và cập nhật thông tin',
       icon: '👤',
       route: '/profile',
       color: 'secondary'
-    },
-    {
-      id: 'reports',
-      title: 'Báo cáo & Thống kê',
-      description: 'Xem báo cáo chi tiết',
-      icon: '📊',
-      route: '/reports',
-      color: 'purple',
-      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR]
     }
   ];
 
   filteredQuickActions: QuickAction[] = [];
-
-  // Chart data (for future implementation)
-  chartData: any = {};
-  chartOptions: any = {};
 
   constructor(
     private authService: AuthService,
@@ -234,14 +158,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
-    // Initialize AOS (Animate On Scroll) if available
-    if (typeof (window as any).AOS !== 'undefined') {
-      (window as any).AOS.init({
-        duration: 800,
-        once: true,
-        offset: 100
-      });
-    }
+    // Component initialization after view
   }
 
   ngOnDestroy(): void {
@@ -328,8 +245,6 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         this.loadTodayShifts(),
         this.loadRecentActivities()
       ]);
-      
-      this.animateNumbers();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       this.notificationService.showError(
@@ -345,25 +260,19 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isStatsLoading = true;
     
     try {
-      // Load basic counts
-      const [employeesRes, departmentsRes, locationsRes, shiftsRes] = await Promise.all([
+      const [employeesRes, departmentsRes, shiftsRes] = await Promise.all([
         this.employeeService.getEmployees({ pageNumber: 1, pageSize: 1 }).toPromise(),
-        this.departmentService.getDepartments(1, 1).toPromise(),
-        this.workLocationService.getWorkLocations(1, 1).toPromise(),
-        this.workShiftService.getWorkShifts(1, 1).toPromise()
+        this.departmentService.getDepartments().toPromise(),
+        this.workShiftService.getWorkShifts().toPromise()
       ]);
 
       if (employeesRes?.success) {
         this.stats.totalEmployees = employeesRes.totalCount || 0;
-        this.stats.activeEmployees = Math.floor(this.stats.totalEmployees * 0.85); // Estimate
+        this.stats.activeEmployees = Math.floor(this.stats.totalEmployees * 0.85);
       }
 
       if (departmentsRes?.success) {
         this.stats.totalDepartments = departmentsRes.totalCount || 0;
-      }
-
-      if (locationsRes?.success) {
-        this.stats.totalWorkLocations = locationsRes.totalCount || 0;
       }
 
       if (shiftsRes?.success) {
@@ -373,10 +282,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       // Calculate derived stats
-      this.stats.employeeGrowth = Math.floor(Math.random() * 15) + 5; // Mock data
-      this.stats.shiftCompletion = Math.floor(Math.random() * 20) + 80; // Mock data
-      this.stats.totalHours = this.stats.completedShifts * 8; // Estimate
-      this.stats.avgShiftDuration = 8.5; // Standard shift
+      this.stats.employeeGrowth = Math.floor(Math.random() * 15) + 5;
+      this.stats.shiftCompletion = Math.floor(Math.random() * 20) + 80;
+      this.stats.totalHours = this.stats.completedShifts * 8;
+      this.stats.avgShiftDuration = 8.5;
 
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -402,8 +311,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async loadTodayShifts(): Promise<void> {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const response = await this.workShiftService.getWorkShifts(1, 10, undefined, today, today).toPromise();
+      const response = await this.workShiftService.getWorkShifts().toPromise();
       
       if (response?.success) {
         this.todayShifts = response.data.slice(0, 5);
@@ -414,7 +322,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private loadRecentActivities(): void {
-    // Mock activity data - in real app, this would come from an audit log service
+    // Mock activity data
     this.recentActivities = [
       {
         id: '1',
@@ -435,52 +343,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         user: 'Manager',
         icon: '📅',
         color: 'info'
-      },
-      {
-        id: '3',
-        type: 'system',
-        title: 'Backup dữ liệu thành công',
-        description: 'Hệ thống đã sao lưu dữ liệu lúc 2:00 AM',
-        timestamp: new Date(Date.now() - 120 * 60000),
-        user: 'System',
-        icon: '💾',
-        color: 'secondary'
       }
     ];
-  }
-
-  // === ANIMATIONS ===
-
-  private animateNumbers(): void {
-    const duration = 2000; // 2 seconds
-    const steps = 60;
-    const stepDuration = duration / steps;
-
-    const stats = [
-      { key: 'totalEmployees', target: this.stats.totalEmployees },
-      { key: 'activeEmployees', target: this.stats.activeEmployees },
-      { key: 'totalDepartments', target: this.stats.totalDepartments },
-      { key: 'todayShifts', target: this.stats.todayShifts },
-      { key: 'upcomingShifts', target: this.stats.upcomingShifts },
-      { key: 'completedShifts', target: this.stats.completedShifts }
-    ];
-
-    stats.forEach(stat => {
-      this.animatedNumbers[stat.key] = 0;
-      const increment = stat.target / steps;
-
-      interval(stepDuration)
-        .pipe(
-          takeUntil(this.destroy$),
-          map(step => Math.min(Math.floor(increment * (step + 1)), stat.target))
-        )
-        .subscribe(value => {
-          this.animatedNumbers[stat.key] = value;
-          if (value >= stat.target) {
-            this.animatedNumbers[stat.key] = stat.target;
-          }
-        });
-    });
   }
 
   // === ACTION HANDLERS ===
@@ -494,15 +358,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    // Add haptic feedback if available
-    if ('vibrate' in navigator) {
-      navigator.vibrate(50);
-    }
-
-    // Navigate to action route
     this.router.navigate([action.route]);
     
-    // Show feedback
     this.notificationService.showInfo(
       'Chuyển hướng',
       `Đang chuyển đến ${action.title.toLowerCase()}...`,
@@ -519,7 +376,6 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   viewAllActivities(): void {
-    // Future implementation - activity log page
     this.notificationService.showInfo(
       'Đang phát triển',
       'Trang nhật ký hoạt động sẽ sớm được cập nhật.'
@@ -528,8 +384,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // === UTILITY METHODS ===
 
-  getAnimatedNumber(key: string): number {
-    return this.animatedNumbers[key] || 0;
+  // ✅ FIX: Add missing getAnimatedNumber method
+  getAnimatedNumber(field: keyof DashboardStats): number {
+    return this.stats[field] as number || 0;
   }
 
   formatNumber(num: number): string {
@@ -604,5 +461,23 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         'Không thể cập nhật dữ liệu dashboard.'
       );
     });
+  }
+
+  // === TRACKBY FUNCTIONS ===
+  
+  trackByAction(index: number, action: QuickAction): string {
+    return action.id;
+  }
+  
+  trackByEmployee(index: number, employee: Employee): number {
+    return employee.id;
+  }
+  
+  trackByShift(index: number, shift: WorkShift): number {
+    return shift.id;
+  }
+  
+  trackByActivity(index: number, activity: ActivityItem): string {
+    return activity.id;
   }
 }

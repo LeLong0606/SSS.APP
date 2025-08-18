@@ -1,7 +1,6 @@
 export const environment = {
   production: true,
   apiUrl: 'https://sss-api.yourdomain.com/api',
-  websocketUrl: 'wss://sss-api.yourdomain.com',
   appName: 'SSS Employee Management',
   version: '2.0.0',
   features: {

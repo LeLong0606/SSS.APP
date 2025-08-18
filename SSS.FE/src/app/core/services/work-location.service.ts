@@ -37,19 +37,27 @@ export class WorkLocationService {
     return this.http.get<ApiResponse<WorkLocation>>(`${this.API_URL}/${id}`);
   }
 
+  // ✅ FIX: Add alias method for backward compatibility
+  getWorkLocationById(id: string | number): Observable<ApiResponse<WorkLocation>> {
+    const stringId = typeof id === 'number' ? id.toString() : id;
+    return this.getWorkLocation(stringId);
+  }
+
   // Create new work location
   createWorkLocation(workLocation: CreateWorkLocationRequest): Observable<ApiResponse<WorkLocation>> {
     return this.http.post<ApiResponse<WorkLocation>>(this.API_URL, workLocation);
   }
 
-  // Update work location
-  updateWorkLocation(id: string, workLocation: UpdateWorkLocationRequest): Observable<ApiResponse<WorkLocation>> {
-    return this.http.put<ApiResponse<WorkLocation>>(`${this.API_URL}/${id}`, workLocation);
+  // Update work location - ✅ FIX: Accept both string and number ID
+  updateWorkLocation(id: string | number, workLocation: UpdateWorkLocationRequest): Observable<ApiResponse<WorkLocation>> {
+    const stringId = typeof id === 'number' ? id.toString() : id;
+    return this.http.put<ApiResponse<WorkLocation>>(`${this.API_URL}/${stringId}`, workLocation);
   }
 
-  // Delete work location
-  deleteWorkLocation(id: string): Observable<ApiResponse<void>> {
-    return this.http.delete<ApiResponse<void>>(`${this.API_URL}/${id}`);
+  // Delete work location - ✅ FIX: Accept both string and number ID
+  deleteWorkLocation(id: string | number): Observable<ApiResponse<void>> {
+    const stringId = typeof id === 'number' ? id.toString() : id;
+    return this.http.delete<ApiResponse<void>>(`${this.API_URL}/${stringId}`);
   }
 
   // Search work locations
@@ -73,9 +81,10 @@ export class WorkLocationService {
     return this.http.get<ApiResponse<WorkLocation[]>>(`${this.API_URL}/active`);
   }
 
-  // Activate/Deactivate work location
-  toggleWorkLocationStatus(id: string, isActive: boolean): Observable<ApiResponse<WorkLocation>> {
-    return this.http.patch<ApiResponse<WorkLocation>>(`${this.API_URL}/${id}/status`, { isActive });
+  // Activate/Deactivate work location - ✅ FIX: Accept both string and number ID
+  toggleWorkLocationStatus(id: string | number, isActive: boolean): Observable<ApiResponse<WorkLocation>> {
+    const stringId = typeof id === 'number' ? id.toString() : id;
+    return this.http.patch<ApiResponse<WorkLocation>>(`${this.API_URL}/${stringId}/status`, { isActive });
   }
 
   // Get work locations by location type

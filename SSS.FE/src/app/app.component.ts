@@ -60,19 +60,28 @@ export class AppComponent implements OnInit {
     
     // Initialize auth state and other app-wide services
     Promise.all([
-      this.authService.getCurrentUser().toPromise().catch(() => null),
-      // Add other initialization tasks here
-    ]).then(() => {
+      this.authService.getCurrentUser().toPromise().catch(() => null)
+    ]).then((results) => {
       this.isAppLoading = false;
-      this.showWelcomeNotification();
+      
+      // Show welcome notification if user is logged in
+      const userResponse = results[0];
+      if (userResponse && userResponse.success && userResponse.user) {
+        this.notificationService.showSuccess(
+          'Chào mừng trở lại!',
+          `Xin chào ${userResponse.user.fullName}. Hệ thống đã sẵn sàng.`,
+          { duration: 3000 }
+        );
+      }
     }).catch(() => {
       this.isAppLoading = false;
     });
   }
 
   private setupRouterLoading(): void {
+    // ✅ FIX: Use proper filter with type guard for NavigationEnd
     this.router.events
-      .pipe(filter(event => event instanceof NavigationEnd))
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event: NavigationEnd) => {
         // Add page transition effects or analytics here
         this.trackPageView(event.url);
@@ -88,17 +97,6 @@ export class AppComponent implements OnInit {
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         this.currentTheme = 'dark';
       }
-    }
-  }
-
-  private showWelcomeNotification(): void {
-    const user = this.authService.getCurrentUserSync();
-    if (user) {
-      this.notificationService.showSuccess(
-        'Chào mừng trở lại!',
-        `Xin chào ${user.fullName}. Hệ thống đã sẵn sàng.`,
-        { duration: 3000 }
-      );
     }
   }
 

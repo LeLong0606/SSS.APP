@@ -1,7 +1,5 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, timer } from 'rxjs';
-import { io, Socket } from 'socket.io-client';
-import { environment } from '../../environments/environment';
 
 export interface Notification {
   id: string;
@@ -46,61 +44,15 @@ export class NotificationService {
   private notificationsSubject = new BehaviorSubject<Notification[]>([]);
   private toastsSubject = new BehaviorSubject<ToastNotification[]>([]);
   private unreadCountSubject = new BehaviorSubject<number>(0);
-  private socket: Socket | null = null;
   
   public notifications$ = this.notificationsSubject.asObservable();
   public toasts$ = this.toastsSubject.asObservable();
   public unreadCount$ = this.unreadCountSubject.asObservable();
 
-  // Sound notifications
-  private sounds = {
-    success: '/assets/sounds/success.mp3',
-    error: '/assets/sounds/error.mp3',
-    warning: '/assets/sounds/warning.mp3',
-    info: '/assets/sounds/info.mp3',
-    urgent: '/assets/sounds/urgent.mp3'
-  };
-
   constructor() {
-    this.initializeWebSocket();
     this.loadStoredNotifications();
   }
 
-  // === REAL-TIME WEBSOCKET CONNECTION ===
-  private initializeWebSocket(): void {
-    if (environment.production) {
-      try {
-        this.socket = io(environment.websocketUrl || environment.apiUrl, {
-          transports: ['websocket', 'polling'],
-          timeout: 20000,
-          forceNew: true,
-        });
-
-        this.socket.on('connect', () => {
-          console.log('🔌 Connected to WebSocket server');
-        });
-
-        this.socket.on('notification', (notification: Notification) => {
-          this.addNotification(notification);
-        });
-
-        this.socket.on('system-alert', (alert: Notification) => {
-          alert.priority = 'urgent';
-          this.addNotification(alert);
-          this.playSound('urgent');
-        });
-
-        this.socket.on('disconnect', () => {
-          console.log('🔌 Disconnected from WebSocket server');
-        });
-      } catch (error) {
-        console.warn('WebSocket connection failed:', error);
-      }
-    }
-  }
-
-  // === NOTIFICATION METHODS ===
-  
   /**
    * Show success notification
    */
@@ -202,44 +154,6 @@ export class NotificationService {
   }
 
   /**
-   * Show confirmation dialog
-   */
-  async showConfirm(
-    title: string,
-    message: string,
-    confirmText: string = 'Confirm',
-    cancelText: string = 'Cancel'
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      const id = this.show({
-        type: 'warning',
-        title,
-        message,
-        persistent: true,
-        icon: '❓',
-        actions: [
-          {
-            label: confirmText,
-            style: 'primary',
-            action: () => {
-              this.hideNotification(id);
-              resolve(true);
-            }
-          },
-          {
-            label: cancelText,
-            style: 'secondary',
-            action: () => {
-              this.hideNotification(id);
-              resolve(false);
-            }
-          }
-        ]
-      });
-    });
-  }
-
-  /**
    * Show custom notification
    */
   show(notification: Partial<Notification>): string {
@@ -259,7 +173,6 @@ export class NotificationService {
 
     this.addNotification(fullNotification);
     this.createToast(fullNotification);
-    this.playSound(fullNotification.type);
 
     // Auto-hide if not persistent
     if (!fullNotification.persistent && fullNotification.duration! > 0) {
@@ -270,8 +183,6 @@ export class NotificationService {
 
     return id;
   }
-
-  // === MANAGEMENT METHODS ===
 
   /**
    * Hide specific notification
@@ -319,28 +230,6 @@ export class NotificationService {
     localStorage.removeItem('sss_notifications');
   }
 
-  /**
-   * Clear notifications by type
-   */
-  clearByType(type: Notification['type']): void {
-    const notifications = this.notificationsSubject.value.filter(n => n.type !== type);
-    const toasts = this.toastsSubject.value.filter(t => t.type !== type);
-    
-    this.notificationsSubject.next(notifications);
-    this.toastsSubject.next(toasts);
-    this.updateUnreadCount();
-    this.saveNotifications();
-  }
-
-  /**
-   * Get notifications by category
-   */
-  getByCategory(category: string): Observable<Notification[]> {
-    return new BehaviorSubject(
-      this.notificationsSubject.value.filter(n => n.category === category)
-    ).asObservable();
-  }
-
   // === PRIVATE METHODS ===
 
   private addNotification(notification: Notification): void {
@@ -358,7 +247,6 @@ export class NotificationService {
 
   private createToast(notification: Notification): void {
     if (notification.type === 'loading' || notification.persistent) {
-      // Don't create toast for loading or persistent notifications
       return;
     }
 
@@ -402,30 +290,13 @@ export class NotificationService {
     this.unreadCountSubject.next(unreadCount);
   }
 
-  private playSound(type: Notification['type'] | 'urgent'): void {
-    if (!environment.production) return;
-    
-    try {
-      const soundUrl = this.sounds[type as keyof typeof this.sounds];
-      if (soundUrl) {
-        const audio = new Audio(soundUrl);
-        audio.volume = 0.5;
-        audio.play().catch(() => {
-          // Silently fail if sound can't play
-        });
-      }
-    } catch (error) {
-      // Silently fail if sound API not available
-    }
-  }
-
   private generateId(): string {
     return `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   private saveNotifications(): void {
     try {
-      const notifications = this.notificationsSubject.value.slice(0, 50); // Save only latest 50
+      const notifications = this.notificationsSubject.value.slice(0, 50);
       localStorage.setItem('sss_notifications', JSON.stringify(notifications));
     } catch (error) {
       console.warn('Failed to save notifications to localStorage:', error);
@@ -442,57 +313,6 @@ export class NotificationService {
       }
     } catch (error) {
       console.warn('Failed to load notifications from localStorage:', error);
-    }
-  }
-
-  // === UTILITY METHODS ===
-
-  /**
-   * Get notification statistics
-   */
-  getStats(): {
-    total: number;
-    unread: number;
-    byType: Record<string, number>;
-    byPriority: Record<string, number>;
-  } {
-    const notifications = this.notificationsSubject.value;
-    
-    return {
-      total: notifications.length,
-      unread: notifications.filter(n => !n.read).length,
-      byType: notifications.reduce((acc, n) => {
-        acc[n.type] = (acc[n.type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
-      byPriority: notifications.reduce((acc, n) => {
-        acc[n.priority] = (acc[n.priority] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    };
-  }
-
-  /**
-   * Cleanup old notifications
-   */
-  cleanup(olderThanDays: number = 7): void {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - olderThanDays);
-    
-    const notifications = this.notificationsSubject.value.filter(
-      n => n.timestamp > cutoff
-    );
-    
-    this.notificationsSubject.next(notifications);
-    this.updateUnreadCount();
-    this.saveNotifications();
-  }
-
-  // === LIFECYCLE ===
-  
-  ngOnDestroy(): void {
-    if (this.socket) {
-      this.socket.disconnect();
     }
   }
 }

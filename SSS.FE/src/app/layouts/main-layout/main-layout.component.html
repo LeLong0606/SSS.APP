@@ -1,42 +1,49 @@
-<div class="main-layout" [class.sidebar-collapsed]="!isSidebarExpanded">
+<div class="main-layout">
   <!-- Header -->
   <header class="header">
     <div class="header-left">
       <button class="sidebar-toggle" (click)="toggleSidebar()">
-        <span class="menu-icon">☰</span>
+        <span class="hamburger"></span>
       </button>
-      <h1 class="app-title">{{ appName }}</h1>
+      <div class="logo">
+        <h1>SSS</h1>
+      </div>
     </div>
-
+    
     <div class="header-right">
-      <div class="user-menu" *ngIf="currentUser">
+      <div class="notifications">
+        <button class="notification-btn">
+          <span class="icon">🔔</span>
+          <span class="badge" *ngIf="unreadNotifications > 0">{{ unreadNotifications }}</span>
+        </button>
+      </div>
+      
+      <div class="user-menu">
         <div class="user-info">
-          <img [src]="getUserAvatar()" alt="Avatar" class="user-avatar">
+          <div class="user-avatar">{{ getUserDisplayName().charAt(0) }}</div>
           <div class="user-details">
-            <span class="user-name">{{ getUserDisplayName() }}</span>
-            <span class="user-role">{{ getUserRoleDisplay() }}</span>
+            <div class="user-name">{{ getUserDisplayName() }}</div>
+            <div class="user-role">{{ getUserRole() }}</div>
           </div>
         </div>
-        <button class="logout-btn" (click)="logout()" title="Đăng xuất">
-          🚪
+        <button class="logout-btn" (click)="logout()">
+          <span class="icon">🚪</span>
+          Đăng xuất
         </button>
       </div>
     </div>
   </header>
 
   <!-- Sidebar -->
-  <aside class="sidebar" [class.expanded]="isSidebarExpanded">
-    <nav class="nav-menu">
-      <ul class="menu-list">
-        <li *ngFor="let item of getVisibleMenuItems()" class="menu-item">
-          <a 
-            [routerLink]="item.route" 
-            class="menu-link"
-            routerLinkActive="active"
-            (click)="navigateTo(item.route)"
-          >
-            <span class="menu-icon">{{ item.icon }}</span>
-            <span class="menu-label" *ngIf="isSidebarExpanded">{{ item.label }}</span>
+  <aside class="sidebar" [class.collapsed]="isSidebarCollapsed">
+    <nav class="sidebar-nav">
+      <ul class="nav-list">
+        <li *ngFor="let item of menuItems" class="nav-item">
+          <a [routerLink]="item.route" 
+             routerLinkActive="active" 
+             class="nav-link">
+            <span class="nav-icon">{{ item.icon }}</span>
+            <span class="nav-label" *ngIf="!isSidebarCollapsed">{{ item.label }}</span>
           </a>
         </li>
       </ul>
@@ -44,13 +51,7 @@
   </aside>
 
   <!-- Main Content -->
-  <main class="main-content">
+  <main class="main-content" [class.sidebar-collapsed]="isSidebarCollapsed">
     <router-outlet></router-outlet>
   </main>
-
-  <!-- Loading Overlay -->
-  <div class="loading-overlay" *ngIf="isLoading">
-    <div class="loading-spinner"></div>
-    <p>Đang tải...</p>
-  </div>
 </div>
