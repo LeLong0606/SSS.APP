@@ -13,6 +13,7 @@ using SSS.BE.Services.EmployeeService;
 using SSS.BE.Services.DepartmentService;
 using SSS.BE.Services.WorkLocationService;
 using SSS.BE.Services.WorkShiftService;
+using SSS.BE.Services.ImageService;
 using SSS.BE.Services.Security;
 using SSS.BE.Services.Database;
 using System.Text;
@@ -126,6 +127,9 @@ builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IWorkLocationService, WorkLocationService>();
 builder.Services.AddScoped<IWorkShiftService, WorkShiftService>();
+
+// ===== Register Image Service =====
+builder.Services.AddScoped<IImageService, ImageService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

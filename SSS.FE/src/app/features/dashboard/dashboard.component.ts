@@ -1,164 +1,66 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild } from '@angular/core';
-import { Subject, takeUntil, interval, map } from 'rxjs';
-import { Router } from '@angular/router';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { takeUntil, finalize } from 'rxjs/operators';
 
-import { AuthService } from '../../core/services/auth.service';
-import { EmployeeService } from '../../core/services/employee.service';
-import { DepartmentService } from '../../core/services/department.service';
-import { WorkShiftService } from '../../core/services/work-shift.service';
-import { WorkLocationService } from '../../core/services/work-location.service';
-import { NotificationService } from '../../core/services/notification.service';
-
-import { UserInfo, UserRole } from '../../core/models/auth.model';
-import { Employee } from '../../core/models/employee.model';
-import { Department } from '../../core/models/department.model';
-import { WorkShift } from '../../core/models/work-shift.model';
-
-import { dashboardAnimations } from './dashboard.animations';
-
-export interface DashboardStats {
-  totalEmployees: number;
-  activeEmployees: number;
-  totalDepartments: number;
-  totalWorkLocations: number;
-  todayShifts: number;
-  upcomingShifts: number;
-  completedShifts: number;
-  totalHours: number;
-  avgShiftDuration: number;
-  employeeGrowth: number;
-  shiftCompletion: number;
-}
-
-export interface QuickAction {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  route: string;
-  color: string;
-  requiredRoles?: UserRole[];
-  badge?: string;
-  disabled?: boolean;
-}
-
-export interface ActivityItem {
-  id: string;
-  type: 'employee' | 'shift' | 'department' | 'system';
-  title: string;
-  description: string;
-  timestamp: Date;
-  user?: string;
-  icon: string;
-  color: string;
-}
+import { 
+  AuthService,
+  EmployeeService, 
+  DepartmentService,
+  WorkShiftService,
+  ImageService,
+  AttendanceService,
+  PayrollService,
+  LoadingService
+} from '../../core/services';
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss'],
-  animations: dashboardAnimations,
-  standalone: false
+  styleUrls: ['./dashboard.component.scss']
 })
-export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
-  @ViewChild('welcomeSection') welcomeSection!: ElementRef;
-  
+export class DashboardComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   
-  // User and permissions
-  currentUser: UserInfo | null = null;
-  canManageEmployees = false;
-  canManageDepartments = false;
-  canManageShifts = false;
-  canViewReports = false;
-
-  // Dashboard data
-  stats: DashboardStats = {
+  // Loading states
+  loading$ = this.loadingService.loading$;
+  
+  // Data
+  currentUser: any = null;
+  employees: any[] = [];
+  departments: any[] = [];
+  workShifts: any[] = [];
+  attendanceStatus: any = null;
+  
+  // Forms - Initialize with definite assignment assertion
+  employeeForm!: FormGroup;
+  workShiftForm!: FormGroup;
+  leaveRequestForm!: FormGroup;
+  
+  // Statistics
+  dashboardStats = {
     totalEmployees: 0,
-    activeEmployees: 0,
     totalDepartments: 0,
-    totalWorkLocations: 0,
     todayShifts: 0,
-    upcomingShifts: 0,
-    completedShifts: 0,
-    totalHours: 0,
-    avgShiftDuration: 0,
-    employeeGrowth: 0,
-    shiftCompletion: 0
+    pendingLeaveRequests: 0
   };
 
-  // UI State
-  isLoading = false;
-  isStatsLoading = false;
-  welcomeMessage = '';
-  currentTime = new Date();
-
-  // Recent data
-  recentEmployees: Employee[] = [];
-  recentShifts: WorkShift[] = [];
-  recentActivities: ActivityItem[] = [];
-  todayShifts: WorkShift[] = [];
-
-  // Quick actions
-  quickActions: QuickAction[] = [
-    {
-      id: 'add-employee',
-      title: 'Thêm nhân viên',
-      description: 'Tạo hồ sơ nhân viên mới',
-      icon: '👥',
-      route: '/employees/create',
-      color: 'primary',
-      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
-    },
-    {
-      id: 'create-shift',
-      title: 'Xếp ca làm việc',
-      description: 'Tạo lịch làm việc mới',
-      icon: '📅',
-      route: '/work-shifts/create',
-      color: 'success',
-      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
-    },
-    {
-      id: 'manage-departments',
-      title: 'Quản lý phòng ban',
-      description: 'Xem và quản lý phòng ban',
-      icon: '🏢',
-      route: '/departments',
-      color: 'info',
-      requiredRoles: [UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER]
-    },
-    {
-      id: 'profile',
-      title: 'Hồ sơ cá nhân',
-      description: 'Xem và cập nhật thông tin',
-      icon: '👤',
-      route: '/profile',
-      color: 'secondary'
-    }
-  ];
-
-  filteredQuickActions: QuickAction[] = [];
-
   constructor(
+    private fb: FormBuilder,
     private authService: AuthService,
     private employeeService: EmployeeService,
     private departmentService: DepartmentService,
     private workShiftService: WorkShiftService,
-    private workLocationService: WorkLocationService,
-    private notificationService: NotificationService,
-    private router: Router
-  ) {}
-
-  ngOnInit(): void {
-    this.initializeUser();
-    this.loadDashboardData();
-    this.startTimeUpdater();
-    this.generateWelcomeMessage();
+    private imageService: ImageService,
+    private attendanceService: AttendanceService,
+    private payrollService: PayrollService,
+    private loadingService: LoadingService
+  ) {
+    this.initializeForms();
   }
 
-  ngAfterViewInit(): void {
-    // Component initialization after view
+  ngOnInit(): void {
+    this.loadInitialData();
   }
 
   ngOnDestroy(): void {
@@ -166,318 +68,293 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.destroy$.complete();
   }
 
-  // === INITIALIZATION ===
-  
-  private initializeUser(): void {
-    this.authService.authState$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(authState => {
-        this.currentUser = authState.user;
-        this.updatePermissions();
-        this.updateQuickActions();
-      });
-  }
+  private initializeForms(): void {
+    this.employeeForm = this.fb.group({
+      employeeCode: ['', [Validators.required]],
+      fullName: ['', [Validators.required]],
+      position: ['', [Validators.required]],
+      departmentId: ['', [Validators.required]],
+      phoneNumber: [''],
+      address: ['']
+    });
 
-  private updatePermissions(): void {
-    if (!this.currentUser) return;
-    
-    this.canManageEmployees = this.authService.hasAnyRole([
-      UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER
-    ]);
-    
-    this.canManageDepartments = this.authService.hasAnyRole([
-      UserRole.ADMINISTRATOR, UserRole.DIRECTOR
-    ]);
-    
-    this.canManageShifts = this.authService.hasAnyRole([
-      UserRole.ADMINISTRATOR, UserRole.DIRECTOR, UserRole.TEAM_LEADER
-    ]);
-    
-    this.canViewReports = this.authService.hasAnyRole([
-      UserRole.ADMINISTRATOR, UserRole.DIRECTOR
-    ]);
-  }
+    this.workShiftForm = this.fb.group({
+      employeeCode: ['', [Validators.required]],
+      workLocationId: ['', [Validators.required]],
+      shiftDate: ['', [Validators.required]],
+      startTime: ['', [Validators.required]],
+      endTime: ['', [Validators.required]]
+    });
 
-  private updateQuickActions(): void {
-    if (!this.currentUser) {
-      this.filteredQuickActions = [];
-      return;
-    }
-
-    this.filteredQuickActions = this.quickActions.filter(action => {
-      if (!action.requiredRoles || action.requiredRoles.length === 0) {
-        return true;
-      }
-      return this.authService.hasAnyRole(action.requiredRoles);
+    this.leaveRequestForm = this.fb.group({
+      startDate: ['', [Validators.required]],
+      endDate: ['', [Validators.required]],
+      leaveType: ['ANNUAL_LEAVE', [Validators.required]],
+      reason: ['', [Validators.required]]
     });
   }
 
-  private startTimeUpdater(): void {
-    interval(1000)
+  private loadInitialData(): void {
+    // Load current user
+    this.authService.getCurrentUser()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          this.currentUser = response.user;
+        }
+      });
+
+    // Load employees
+    this.loadEmployees();
+    
+    // Load departments
+    this.loadDepartments();
+    
+    // Load work shifts
+    this.loadWorkShifts();
+    
+    // Load attendance status
+    this.loadAttendanceStatus();
+    
+    // Load dashboard statistics
+    this.loadDashboardStats();
+  }
+
+  // Employee Management - FIXED: Use filter object instead of separate arguments
+  loadEmployees(): void {
+    this.employeeService.getEmployees({ pageNumber: 1, pageSize: 50 })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          this.employees = response.data;
+          this.dashboardStats.totalEmployees = response.totalCount;
+        }
+      });
+  }
+
+  createEmployee(): void {
+    if (this.employeeForm.valid) {
+      const employeeData = this.employeeForm.value;
+      
+      this.employeeService.createEmployee(employeeData)
+        .pipe(
+          takeUntil(this.destroy$),
+          finalize(() => this.employeeForm.reset())
+        )
+        .subscribe(response => {
+          if (response.success) {
+            console.log('Employee created successfully!');
+            this.loadEmployees(); // Refresh list
+          } else {
+            console.error('Failed to create employee:', response.errors);
+          }
+        });
+    }
+  }
+
+  // Department Management - FIXED: Use filter object instead of separate arguments
+  loadDepartments(): void {
+    this.departmentService.getDepartments({ pageNumber: 1, pageSize: 20 })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          this.departments = response.data;
+          this.dashboardStats.totalDepartments = response.totalCount;
+        }
+      });
+  }
+
+  // Work Shift Management - Fixed method calls
+  loadWorkShifts(): void {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Fixed: Use correct parameter names for the service method
+    this.workShiftService.getWorkShifts(1, 50, undefined, today, today)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          this.workShifts = response.data;
+          this.dashboardStats.todayShifts = response.totalCount;
+        }
+      });
+  }
+
+  createWorkShift(): void {
+    if (this.workShiftForm.valid) {
+      const shiftData = {
+        ...this.workShiftForm.value,
+        shiftDate: new Date(this.workShiftForm.value.shiftDate),
+        workLocationId: Number(this.workShiftForm.value.workLocationId)
+      };
+      
+      this.workShiftService.createWorkShift(shiftData)
+        .pipe(
+          takeUntil(this.destroy$),
+          finalize(() => this.workShiftForm.reset())
+        )
+        .subscribe(response => {
+          if (response.success) {
+            console.log('Work shift created successfully!');
+            this.loadWorkShifts(); // Refresh list
+          } else {
+            console.error('Failed to create work shift:', response.errors);
+          }
+        });
+    }
+  }
+
+  // Attendance Management
+  loadAttendanceStatus(): void {
+    this.attendanceService.getCurrentStatus()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          this.attendanceStatus = response.data;
+        }
+      });
+  }
+
+  checkIn(): void {
+    const checkInData = {
+      checkInTime: new Date(),
+      notes: 'Check-in from dashboard'
+    };
+
+    this.attendanceService.checkIn(checkInData)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          console.log('Checked in successfully!');
+          this.loadAttendanceStatus(); // Refresh status
+        } else {
+          console.error('Failed to check in:', response.errors);
+        }
+      });
+  }
+
+  checkOut(): void {
+    const checkOutData = {
+      checkOutTime: new Date(),
+      notes: 'Check-out from dashboard'
+    };
+
+    this.attendanceService.checkOut(checkOutData)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          console.log('Checked out successfully!');
+          this.loadAttendanceStatus(); // Refresh status
+        } else {
+          console.error('Failed to check out:', response.errors);
+        }
+      });
+  }
+
+  // Image Management
+  onFileSelected(event: any, fileType: string): void {
+    const file = event.target.files[0];
+    if (file) {
+      this.uploadImage(file, fileType);
+    }
+  }
+
+  uploadImage(file: File, fileType: string): void {
+    this.imageService.uploadImage(file, fileType, 'Dashboard upload')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          console.log('Image uploaded successfully!', response.data);
+        } else {
+          console.error('Failed to upload image:', response.errors);
+        }
+      });
+  }
+
+  uploadEmployeePhoto(file: File): void {
+    if (!file) return;
+    
+    this.imageService.setMyPhoto(file)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          console.log('Employee photo uploaded successfully!');
+        } else {
+          console.error('Failed to upload employee photo:', response.errors);
+        }
+      });
+  }
+
+  // Payroll Management - Fixed method calls
+  createLeaveRequest(): void {
+    if (this.leaveRequestForm.valid) {
+      const leaveData = {
+        ...this.leaveRequestForm.value,
+        startDate: new Date(this.leaveRequestForm.value.startDate),
+        endDate: new Date(this.leaveRequestForm.value.endDate)
+      };
+      
+      this.payrollService.createLeaveRequest(leaveData)
+        .pipe(
+          takeUntil(this.destroy$),
+          finalize(() => this.leaveRequestForm.reset())
+        )
+        .subscribe(response => {
+          if (response.success) {
+            console.log('Leave request created successfully!');
+            this.loadDashboardStats(); // Refresh stats
+          } else {
+            console.error('Failed to create leave request:', response.errors);
+          }
+        });
+    }
+  }
+
+  // Dashboard Statistics - Fixed method calls
+  private loadDashboardStats(): void {
+    // Fixed: Use correct parameter signature for getMyLeaveRequests
+    this.payrollService.getMyLeaveRequests(1, 1, 'PENDING')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(response => {
+        if (response.success) {
+          this.dashboardStats.pendingLeaveRequests = response.totalCount;
+        }
+      });
+  }
+
+  // Utility Methods
+  isAuthenticated(): boolean {
+    return this.authService.isAuthenticated();
+  }
+
+  hasRole(role: string): boolean {
+    return this.authService.hasRole(role);
+  }
+
+  logout(): void {
+    this.authService.logout()
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        this.currentTime = new Date();
+        console.log('Logged out successfully');
       });
   }
 
-  private generateWelcomeMessage(): void {
-    const hour = new Date().getHours();
-    const name = this.currentUser?.fullName?.split(' ')[0] || 'bạn';
-    
-    if (hour < 12) {
-      this.welcomeMessage = `Chào buổi sáng, ${name}!`;
-    } else if (hour < 17) {
-      this.welcomeMessage = `Chào buổi chiều, ${name}!`;
-    } else {
-      this.welcomeMessage = `Chào buổi tối, ${name}!`;
-    }
+  // Helper method to get employee photo URL
+  getEmployeePhotoUrl(employeeCode: string): string {
+    return this.imageService.getEmployeeAvatarUrl(employeeCode);
   }
 
-  // === DATA LOADING ===
-
-  private async loadDashboardData(): Promise<void> {
-    this.isLoading = true;
-    
-    try {
-      await Promise.all([
-        this.loadStats(),
-        this.loadRecentEmployees(),
-        this.loadTodayShifts(),
-        this.loadRecentActivities()
-      ]);
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      this.notificationService.showError(
-        'Lỗi tải dữ liệu',
-        'Không thể tải một số thông tin dashboard. Vui lòng thử lại.'
-      );
-    } finally {
-      this.isLoading = false;
-    }
+  // Helper method to format file size
+  formatFileSize(bytes: number): string {
+    return this.imageService.formatFileSize(bytes);
   }
 
-  private async loadStats(): Promise<void> {
-    this.isStatsLoading = true;
-    
-    try {
-      const [employeesRes, departmentsRes, shiftsRes] = await Promise.all([
-        this.employeeService.getEmployees({ pageNumber: 1, pageSize: 1 }).toPromise(),
-        this.departmentService.getDepartments().toPromise(),
-        this.workShiftService.getWorkShifts().toPromise()
-      ]);
-
-      if (employeesRes?.success) {
-        this.stats.totalEmployees = employeesRes.totalCount || 0;
-        this.stats.activeEmployees = Math.floor(this.stats.totalEmployees * 0.85);
-      }
-
-      if (departmentsRes?.success) {
-        this.stats.totalDepartments = departmentsRes.totalCount || 0;
-      }
-
-      if (shiftsRes?.success) {
-        this.stats.todayShifts = shiftsRes.totalCount || 0;
-        this.stats.upcomingShifts = Math.floor(shiftsRes.totalCount * 0.3);
-        this.stats.completedShifts = Math.floor(shiftsRes.totalCount * 0.7);
-      }
-
-      // Calculate derived stats
-      this.stats.employeeGrowth = Math.floor(Math.random() * 15) + 5;
-      this.stats.shiftCompletion = Math.floor(Math.random() * 20) + 80;
-      this.stats.totalHours = this.stats.completedShifts * 8;
-      this.stats.avgShiftDuration = 8.5;
-
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    } finally {
-      this.isStatsLoading = false;
-    }
+  // Helper method to format time
+  formatTime(time: string): string {
+    return this.workShiftService.formatTime(time);
   }
 
-  private async loadRecentEmployees(): Promise<void> {
-    try {
-      const response = await this.employeeService.getEmployees({ 
-        pageNumber: 1, 
-        pageSize: 5 
-      }).toPromise();
-      
-      if (response?.success) {
-        this.recentEmployees = response.data.slice(0, 5);
-      }
-    } catch (error) {
-      console.error('Error loading recent employees:', error);
-    }
-  }
-
-  private async loadTodayShifts(): Promise<void> {
-    try {
-      const response = await this.workShiftService.getWorkShifts().toPromise();
-      
-      if (response?.success) {
-        this.todayShifts = response.data.slice(0, 5);
-      }
-    } catch (error) {
-      console.error('Error loading today shifts:', error);
-    }
-  }
-
-  private loadRecentActivities(): void {
-    // Mock activity data
-    this.recentActivities = [
-      {
-        id: '1',
-        type: 'employee',
-        title: 'Nhân viên mới được thêm',
-        description: 'Nguyễn Văn A đã được thêm vào hệ thống',
-        timestamp: new Date(Date.now() - 30 * 60000),
-        user: 'Admin',
-        icon: '👤',
-        color: 'success'
-      },
-      {
-        id: '2',
-        type: 'shift',
-        title: 'Ca làm việc được cập nhật',
-        description: 'Ca sáng ngày hôm nay đã được thay đổi',
-        timestamp: new Date(Date.now() - 60 * 60000),
-        user: 'Manager',
-        icon: '📅',
-        color: 'info'
-      }
-    ];
-  }
-
-  // === ACTION HANDLERS ===
-
-  executeQuickAction(action: QuickAction): void {
-    if (action.disabled) {
-      this.notificationService.showWarning(
-        'Tính năng không khả dụng',
-        'Tính năng này hiện tại chưa được kích hoạt.'
-      );
-      return;
-    }
-
-    this.router.navigate([action.route]);
-    
-    this.notificationService.showInfo(
-      'Chuyển hướng',
-      `Đang chuyển đến ${action.title.toLowerCase()}...`,
-      { duration: 2000 }
-    );
-  }
-
-  viewAllEmployees(): void {
-    this.router.navigate(['/employees']);
-  }
-
-  viewAllShifts(): void {
-    this.router.navigate(['/work-shifts']);
-  }
-
-  viewAllActivities(): void {
-    this.notificationService.showInfo(
-      'Đang phát triển',
-      'Trang nhật ký hoạt động sẽ sớm được cập nhật.'
-    );
-  }
-
-  // === UTILITY METHODS ===
-
-  // ✅ FIX: Add missing getAnimatedNumber method
-  getAnimatedNumber(field: keyof DashboardStats): number {
-    return this.stats[field] as number || 0;
-  }
-
-  formatNumber(num: number): string {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
-  }
-
-  formatTime(date: Date): string {
-    return new Intl.DateTimeFormat('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    }).format(date);
-  }
-
-  formatDate(date: Date): string {
-    return new Intl.DateTimeFormat('vi-VN', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }).format(date);
-  }
-
-  getRelativeTime(date: Date): string {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    
-    if (minutes < 1) return 'Vừa xong';
-    if (minutes < 60) return `${minutes} phút trước`;
-    
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} giờ trước`;
-    
-    const days = Math.floor(hours / 24);
-    return `${days} ngày trước`;
-  }
-
-  getUserRole(): string {
-    if (!this.currentUser?.roles?.length) return 'Nhân viên';
-    
-    const role = this.currentUser.roles[0];
-    switch (role) {
-      case 'Administrator': return 'Quản trị viên';
-      case 'Director': return 'Giám đốc';
-      case 'TeamLeader': return 'Trưởng phòng';
-      default: return 'Nhân viên';
-    }
-  }
-
-  refreshDashboard(): void {
-    const loadingId = this.notificationService.showLoading(
-      'Đang làm mới',
-      'Đang tải lại dữ liệu dashboard...'
-    );
-    
-    this.loadDashboardData().then(() => {
-      this.notificationService.completeLoading(
-        loadingId,
-        'Làm mới thành công',
-        'Dữ liệu dashboard đã được cập nhật.'
-      );
-    }).catch(() => {
-      this.notificationService.hideNotification(loadingId);
-      this.notificationService.showError(
-        'Lỗi làm mới',
-        'Không thể cập nhật dữ liệu dashboard.'
-      );
-    });
-  }
-
-  // === TRACKBY FUNCTIONS ===
-  
-  trackByAction(index: number, action: QuickAction): string {
-    return action.id;
-  }
-  
-  trackByEmployee(index: number, employee: Employee): number {
-    return employee.id;
-  }
-  
-  trackByShift(index: number, shift: WorkShift): number {
-    return shift.id;
-  }
-  
-  trackByActivity(index: number, activity: ActivityItem): string {
-    return activity.id;
+  // Helper method to calculate worked hours
+  calculateWorkedHours(checkIn: Date, checkOut: Date): number {
+    return this.attendanceService.calculateWorkedHours(checkIn, checkOut);
   }
 }

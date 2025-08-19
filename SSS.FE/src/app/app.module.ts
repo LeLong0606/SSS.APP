@@ -1,78 +1,66 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { HttpClientModule, provideHttpClient, withInterceptors } from '@angular/common/http';
-import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
 
-// Core imports
-import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
+import { AppComponent } from './app.component';
 
-// Interceptors
-import { authInterceptor } from './core/interceptors/auth.interceptor';
-import { errorInterceptor } from './core/interceptors/error.interceptor';
-
-// Guards
-import { AuthGuard } from './core/guards/auth.guard';
-import { NoAuthGuard } from './core/guards/no-auth.guard';
-import { RoleGuard } from './core/guards/role.guard';
-
-// Core Services
-import { AuthService } from './core/services/auth.service';
-import { NotificationService } from './core/services/notification.service';
-import { EmployeeService } from './core/services/employee.service';
-import { DepartmentService } from './core/services/department.service';
-import { WorkShiftService } from './core/services/work-shift.service';
-import { WorkLocationService } from './core/services/work-location.service';
-
-// Layout Components
-import { MainLayoutComponent } from './layouts/main-layout/main-layout.component';
-
-// Shared Components
-import { ToastContainerComponent } from './shared/components/toast-container/toast-container.component';
-import { LoadingSpinnerComponent } from './shared/components/loading-spinner/loading-spinner.component';
-import { ConfirmDialogComponent } from './shared/components/confirm-dialog/confirm-dialog.component';
+// Core Services and Interceptors
+import {
+  AuthInterceptor,
+  LoadingInterceptor,
+  AuthService,
+  EmployeeService,
+  DepartmentService,
+  WorkLocationService,
+  WorkShiftService,
+  ImageService,
+  AttendanceService,
+  ShiftManagementService,
+  PayrollService,
+  LoadingService,
+  NotificationService
+} from './core/services';
 
 @NgModule({
   declarations: [
-    AppComponent,
-    MainLayoutComponent,
-    ToastContainerComponent,
-    LoadingSpinnerComponent,
-    ConfirmDialogComponent
+    AppComponent
   ],
   imports: [
-    // Angular Core Modules
     BrowserModule,
     BrowserAnimationsModule,
-    CommonModule,
-    FormsModule,
+    HttpClientModule,
     ReactiveFormsModule,
-    RouterModule,
-    
-    // App Routing - MUST BE LAST
+    FormsModule,
     AppRoutingModule
   ],
   providers: [
-    // ✅ FIX: Use the new provideHttpClient with functional interceptors
-    provideHttpClient(
-      withInterceptors([authInterceptor, errorInterceptor])
-    ),
+    // HTTP Interceptors
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: LoadingInterceptor,
+      multi: true
+    },
     
-    // Route Guards
-    AuthGuard,
-    NoAuthGuard,
-    RoleGuard,
-    
-    // Services (with @Injectable({ providedIn: 'root' }))
+    // Core Services
     AuthService,
-    NotificationService,
     EmployeeService,
     DepartmentService,
+    WorkLocationService,
     WorkShiftService,
-    WorkLocationService
+    ImageService,
+    AttendanceService,
+    ShiftManagementService,
+    PayrollService,
+    LoadingService,
+    NotificationService
   ],
   bootstrap: [AppComponent]
 })

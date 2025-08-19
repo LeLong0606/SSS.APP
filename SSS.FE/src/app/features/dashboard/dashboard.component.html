@@ -1,352 +1,443 @@
-<div class="dashboard-container" [@cardSlideIn]>
-  <!-- Welcome Section -->
-  <section class="welcome-section" #welcomeSection>
-    <div class="welcome-content">
-      <div class="welcome-text">
-        <h1 class="welcome-title">{{ welcomeMessage }}</h1>
-        <p class="welcome-subtitle">{{ formatDate(currentTime) }}</p>
-        <p class="welcome-description">
-          Chào mừng bạn đến với hệ thống quản lý nhân sự SSS. 
-          Bạn đang đăng nhập với quyền <strong>{{ getUserRole() }}</strong>.
-        </p>
-      </div>
-      <div class="welcome-time">
-        <div class="time-display">
-          <span class="current-time">{{ formatTime(currentTime) }}</span>
-          <span class="time-label">Giờ hiện tại</span>
-        </div>
-        <button class="refresh-btn" (click)="refreshDashboard()" [disabled]="isLoading">
-          <svg class="refresh-icon" [class.spinning]="isLoading" viewBox="0 0 24 24" fill="none">
-            <path d="M3 3v5h5M21 21v-5h-5M4 12a8 8 0 0 1 16 0M20 12a8 8 0 0 1-16 0" 
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Làm mới
-        </button>
-      </div>
+<div class="dashboard-container" *ngIf="isAuthenticated()">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="loading$ | async">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
     </div>
-  </section>
-
-  <!-- Statistics Overview -->
-  <section class="stats-section" [@counterAnimation] *ngIf="!isStatsLoading">
-    <div class="stats-grid">
-      <!-- Total Employees -->
-      <div class="stat-card stat-primary" data-aos="fade-up" data-aos-delay="0">
-        <div class="stat-content">
-          <div class="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
-              <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-              <path d="m22 21-3-3m0 0-3-3m3 3-3 3m3-3h-8" stroke="currentColor" stroke-width="2"/>
-            </svg>
-          </div>
-          <div class="stat-data">
-            <div class="stat-number">{{ getAnimatedNumber('totalEmployees') }}</div>
-            <div class="stat-label">Tổng nhân viên</div>
-            <div class="stat-trend positive">
-              <span class="trend-icon">↗</span>
-              <span>+{{ stats.employeeGrowth }}% tháng này</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Active Employees -->
-      <div class="stat-card stat-success" data-aos="fade-up" data-aos-delay="100">
-        <div class="stat-content">
-          <div class="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
-              <circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-              <polyline points="17,11 19,13 23,9" stroke="currentColor" stroke-width="2"/>
-            </svg>
-          </div>
-          <div class="stat-data">
-            <div class="stat-number">{{ getAnimatedNumber('activeEmployees') }}</div>
-            <div class="stat-label">Đang làm việc</div>
-            <div class="stat-trend positive">
-              <span class="trend-icon">✓</span>
-              <span>{{ ((stats.activeEmployees / stats.totalEmployees) * 100 | number:'1.0-0') || 0 }}% tổng số</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Departments -->
-      <div class="stat-card stat-info" data-aos="fade-up" data-aos-delay="200">
-        <div class="stat-content">
-          <div class="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M3 21h18M4 21V8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v13M12 8v13M16 8h2a1 1 0 0 1 1 1v12" 
-                    stroke="currentColor" stroke-width="2"/>
-              <path d="M6 4h2v2H6zM10 4h2v2h-2zM14 4h2v2h-2z" fill="currentColor"/>
-            </svg>
-          </div>
-          <div class="stat-data">
-            <div class="stat-number">{{ getAnimatedNumber('totalDepartments') }}</div>
-            <div class="stat-label">Phòng ban</div>
-            <div class="stat-trend neutral">
-              <span class="trend-icon">🏢</span>
-              <span>Tổ chức ổn định</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Today's Shifts -->
-      <div class="stat-card stat-warning" data-aos="fade-up" data-aos-delay="300">
-        <div class="stat-content">
-          <div class="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-              <polyline points="12,6 12,12 16,14" stroke="currentColor" stroke-width="2"/>
-            </svg>
-          </div>
-          <div class="stat-data">
-            <div class="stat-number">{{ getAnimatedNumber('todayShifts') }}</div>
-            <div class="stat-label">Ca hôm nay</div>
-            <div class="stat-trend positive">
-              <span class="trend-icon">📅</span>
-              <span>{{ stats.shiftCompletion }}% hoàn thành</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Quick Actions -->
-  <section class="quick-actions-section">
-    <div class="section-header">
-      <h2 class="section-title">Thao tác nhanh</h2>
-      <p class="section-subtitle">Các tác vụ thường xuyên sử dụng</p>
-    </div>
-    
-    <div class="quick-actions-grid" [@listAnimation]>
-      <div 
-        *ngFor="let action of filteredQuickActions; trackBy: trackByAction"
-        class="action-card action-{{ action.color }}"
-        [class.action-disabled]="action.disabled"
-        (click)="executeQuickAction(action)"
-        [@actionHover]="action.id"
-        data-aos="zoom-in"
-        [attr.data-aos-delay]="filteredQuickActions.indexOf(action) * 50">
-        
-        <div class="action-content">
-          <div class="action-icon">
-            <span class="icon-emoji">{{ action.icon }}</span>
-          </div>
-          <div class="action-info">
-            <h3 class="action-title">{{ action.title }}</h3>
-            <p class="action-description">{{ action.description }}</p>
-          </div>
-          <div class="action-arrow">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M5 12h14m-7-7 7 7-7 7" stroke="currentColor" stroke-width="2"/>
-            </svg>
-          </div>
-        </div>
-        
-        <div class="action-ripple"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Main Content Grid -->
-  <div class="content-grid">
-    
-    <!-- Recent Employees -->
-    <section class="content-card employees-card" data-aos="fade-right">
-      <div class="card-header">
-        <h3 class="card-title">
-          <svg class="card-icon" viewBox="0 0 24 24" fill="none">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
-            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-          </svg>
-          Nhân viên mới nhất
-        </h3>
-        <button class="view-all-btn" (click)="viewAllEmployees()">
-          Xem tất cả
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M5 12h14m-7-7 7 7-7 7" stroke="currentColor" stroke-width="2"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card-content">
-        <div class="employees-list" *ngIf="recentEmployees.length > 0; else noEmployees">
-          <div 
-            *ngFor="let employee of recentEmployees; trackBy: trackByEmployee"
-            class="employee-item"
-            [@listAnimation]>
-            <div class="employee-avatar">
-              <div class="avatar-placeholder">
-                {{ employee.fullName.charAt(0).toUpperCase() }}
-              </div>
-            </div>
-            <div class="employee-info">
-              <div class="employee-name">{{ employee.fullName }}</div>
-              <div class="employee-details">
-                <span class="employee-code">{{ employee.employeeCode }}</span>
-                <span class="employee-department">{{ employee.departmentId ? 'Phòng ' + employee.departmentId : 'Chưa phân bổ' }}</span>
-              </div>
-            </div>
-            <div class="employee-status">
-              <span class="status-badge" [class.active]="employee.isActive">
-                {{ employee.isActive ? 'Hoạt động' : 'Tạm dừng' }}
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <ng-template #noEmployees>
-          <div class="empty-state">
-            <div class="empty-icon">👥</div>
-            <div class="empty-text">Chưa có nhân viên nào</div>
-          </div>
-        </ng-template>
-      </div>
-    </section>
-
-    <!-- Today's Shifts -->
-    <section class="content-card shifts-card" data-aos="fade-left">
-      <div class="card-header">
-        <h3 class="card-title">
-          <svg class="card-icon" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-            <polyline points="12,6 12,12 16,14" stroke="currentColor" stroke-width="2"/>
-          </svg>
-          Ca làm hôm nay
-        </h3>
-        <button class="view-all-btn" (click)="viewAllShifts()">
-          Xem tất cả
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M5 12h14m-7-7 7 7-7 7" stroke="currentColor" stroke-width="2"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card-content">
-        <div class="shifts-list" *ngIf="todayShifts.length > 0; else noShifts">
-          <div 
-            *ngFor="let shift of todayShifts; trackBy: trackByShift"
-            class="shift-item"
-            [@listAnimation]>
-            <div class="shift-time">
-              <div class="time-range">
-                <span class="start-time">{{ shift.startTime.substring(0, 5) }}</span>
-                <span class="time-separator">-</span>
-                <span class="end-time">{{ shift.endTime.substring(0, 5) }}</span>
-              </div>
-              <div class="shift-duration">{{ shift.totalHours }}h</div>
-            </div>
-            <div class="shift-info">
-              <div class="shift-employee">{{ shift.employeeName }}</div>
-              <div class="shift-location">📍 {{ shift.workLocationName }}</div>
-            </div>
-            <div class="shift-status">
-              <span class="status-indicator" [class.active]="shift.isActive"></span>
-            </div>
-          </div>
-        </div>
-        
-        <ng-template #noShifts>
-          <div class="empty-state">
-            <div class="empty-icon">📅</div>
-            <div class="empty-text">Không có ca làm hôm nay</div>
-          </div>
-        </ng-template>
-      </div>
-    </section>
-
-    <!-- Recent Activities -->
-    <section class="content-card activities-card" data-aos="fade-up">
-      <div class="card-header">
-        <h3 class="card-title">
-          <svg class="card-icon" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-            <path d="M12 1v6m0 6v6M1 12h6m6 0h6" stroke="currentColor" stroke-width="2"/>
-          </svg>
-          Hoạt động gần đây
-        </h3>
-        <button class="view-all-btn" (click)="viewAllActivities()">
-          Xem tất cả
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M5 12h14m-7-7 7 7-7 7" stroke="currentColor" stroke-width="2"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card-content">
-        <div class="activities-timeline" [@listAnimation]>
-          <div 
-            *ngFor="let activity of recentActivities; trackBy: trackByActivity"
-            class="activity-item">
-            <div class="activity-icon activity-{{ activity.color }}">
-              <span>{{ activity.icon }}</span>
-            </div>
-            <div class="activity-content">
-              <div class="activity-title">{{ activity.title }}</div>
-              <div class="activity-description">{{ activity.description }}</div>
-              <div class="activity-meta">
-                <span class="activity-user">{{ activity.user }}</span>
-                <span class="activity-time">{{ getRelativeTime(activity.timestamp) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
   </div>
 
-  <!-- Performance Overview (Future Implementation) -->
-  <section class="performance-section" data-aos="fade-up" data-aos-delay="400">
-    <div class="section-header">
-      <h2 class="section-title">Tổng quan hiệu suất</h2>
-      <p class="section-subtitle">Theo dõi các chỉ số quan trọng</p>
+  <!-- Header Section -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h1 class="h3 mb-0">Dashboard</h1>
+          <p class="text-muted mb-0" *ngIf="currentUser">Welcome, {{ currentUser.fullName }}!</p>
+        </div>
+        <div>
+          <!-- User Avatar -->
+          <img 
+            [src]="getEmployeePhotoUrl(currentUser?.employeeCode)" 
+            class="rounded-circle me-2" 
+            width="40" 
+            height="40" 
+            alt="User Avatar"
+            *ngIf="currentUser?.employeeCode"
+            (error)="$event.target.src='/assets/images/default-avatar.png'">
+          <button class="btn btn-outline-secondary" (click)="logout()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Statistics Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="card bg-primary text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <div class="card-title h5">Employees</div>
+              <div class="h3 mb-0">{{ dashboardStats.totalEmployees }}</div>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-users fa-2x opacity-75"></i>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
-    <div class="performance-grid">
-      <div class="performance-card">
-        <div class="performance-header">
-          <h4>Hiệu suất làm việc</h4>
-          <span class="performance-value">{{ stats.shiftCompletion }}%</span>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-fill" [style.width.%]="stats.shiftCompletion"></div>
-        </div>
-      </div>
-      
-      <div class="performance-card">
-        <div class="performance-header">
-          <h4>Tổng giờ làm</h4>
-          <span class="performance-value">{{ formatNumber(stats.totalHours) }}h</span>
-        </div>
-        <div class="performance-trend positive">
-          <span>↗ Tăng 12% so với tháng trước</span>
-        </div>
-      </div>
-      
-      <div class="performance-card">
-        <div class="performance-header">
-          <h4>Trung bình ca/ngày</h4>
-          <span class="performance-value">{{ stats.avgShiftDuration }}h</span>
-        </div>
-        <div class="performance-trend neutral">
-          <span>→ Ổn định</span>
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="card bg-success text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <div class="card-title h5">Departments</div>
+              <div class="h3 mb-0">{{ dashboardStats.totalDepartments }}</div>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-building fa-2x opacity-75"></i>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </section>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="card bg-info text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <div class="card-title h5">Today's Shifts</div>
+              <div class="h3 mb-0">{{ dashboardStats.todayShifts }}</div>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-clock fa-2x opacity-75"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="card bg-warning text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <div class="card-title h5">Pending Leaves</div>
+              <div class="h3 mb-0">{{ dashboardStats.pendingLeaveRequests }}</div>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-calendar-times fa-2x opacity-75"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attendance Section -->
+  <div class="row mb-4" *ngIf="attendanceStatus">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-fingerprint me-2"></i>Attendance Status
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-6">
+              <div class="d-flex align-items-center mb-3">
+                <span class="badge me-3" 
+                      [class]="'bg-' + (attendanceStatus.status === 'CHECKED_IN' ? 'success' : 
+                               attendanceStatus.status === 'CHECKED_OUT' ? 'secondary' : 'warning')">
+                  {{ attendanceStatus.status | titlecase }}
+                </span>
+                <span class="text-muted">Today: {{ attendanceStatus.today }}</span>
+              </div>
+              
+              <div class="mb-2" *ngIf="attendanceStatus.lastCheckIn">
+                <small class="text-muted">Last Check In:</small>
+                <strong class="ms-2">{{ attendanceStatus.lastCheckIn | date:'short' }}</strong>
+              </div>
+              
+              <div class="mb-2" *ngIf="attendanceStatus.lastCheckOut">
+                <small class="text-muted">Last Check Out:</small>
+                <strong class="ms-2">{{ attendanceStatus.lastCheckOut | date:'short' }}</strong>
+              </div>
+              
+              <div *ngIf="attendanceStatus.totalWorkedHours > 0">
+                <small class="text-muted">Worked Hours:</small>
+                <strong class="ms-2">{{ attendanceStatus.totalWorkedHours | number:'1.2-2' }}h</strong>
+              </div>
+            </div>
+            
+            <div class="col-md-6 text-end">
+              <button 
+                class="btn btn-success me-2" 
+                (click)="checkIn()" 
+                [disabled]="attendanceStatus.status === 'CHECKED_IN'">
+                <i class="fas fa-sign-in-alt"></i> Check In
+              </button>
+              <button 
+                class="btn btn-danger" 
+                (click)="checkOut()" 
+                [disabled]="attendanceStatus.status !== 'CHECKED_IN'">
+                <i class="fas fa-sign-out-alt"></i> Check Out
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions Row -->
+  <div class="row mb-4">
+    <!-- Employee Management -->
+    <div class="col-lg-4 mb-3" *ngIf="hasRole('Administrator') || hasRole('Director')">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-user-plus me-2"></i>Quick Add Employee
+          </h5>
+        </div>
+        <div class="card-body">
+          <form [formGroup]="employeeForm" (ngSubmit)="createEmployee()">
+            <div class="mb-3">
+              <input type="text" class="form-control form-control-sm" 
+                     formControlName="employeeCode" placeholder="Employee Code" required>
+            </div>
+            <div class="mb-3">
+              <input type="text" class="form-control form-control-sm" 
+                     formControlName="fullName" placeholder="Full Name" required>
+            </div>
+            <div class="mb-3">
+              <input type="text" class="form-control form-control-sm" 
+                     formControlName="position" placeholder="Position" required>
+            </div>
+            <div class="mb-3">
+              <select class="form-select form-select-sm" formControlName="departmentId" required>
+                <option value="">Select Department</option>
+                <option *ngFor="let dept of departments" [value]="dept.id">
+                  {{ dept.name }}
+                </option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-100" 
+                    [disabled]="!employeeForm.valid">
+              <i class="fas fa-plus"></i> Add Employee
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Shift Management -->
+    <div class="col-lg-4 mb-3" *ngIf="hasRole('Administrator') || hasRole('Director') || hasRole('TeamLeader')">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-calendar-plus me-2"></i>Quick Add Shift
+          </h5>
+        </div>
+        <div class="card-body">
+          <form [formGroup]="workShiftForm" (ngSubmit)="createWorkShift()">
+            <div class="mb-3">
+              <select class="form-select form-select-sm" formControlName="employeeCode" required>
+                <option value="">Select Employee</option>
+                <option *ngFor="let emp of employees" [value]="emp.employeeCode">
+                  {{ emp.fullName }} ({{ emp.employeeCode }})
+                </option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <input type="date" class="form-control form-control-sm" 
+                     formControlName="shiftDate" required>
+            </div>
+            <div class="row">
+              <div class="col-6 mb-3">
+                <input type="time" class="form-control form-control-sm" 
+                       formControlName="startTime" required>
+              </div>
+              <div class="col-6 mb-3">
+                <input type="time" class="form-control form-control-sm" 
+                       formControlName="endTime" required>
+              </div>
+            </div>
+            <div class="mb-3">
+              <input type="number" class="form-control form-control-sm" 
+                     formControlName="workLocationId" placeholder="Location ID" required>
+            </div>
+            <button type="submit" class="btn btn-info btn-sm w-100" 
+                    [disabled]="!workShiftForm.valid">
+              <i class="fas fa-plus"></i> Add Shift
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leave Request -->
+    <div class="col-lg-4 mb-3">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-paper-plane me-2"></i>Request Leave
+          </h5>
+        </div>
+        <div class="card-body">
+          <form [formGroup]="leaveRequestForm" (ngSubmit)="createLeaveRequest()">
+            <div class="mb-3">
+              <select class="form-select form-select-sm" formControlName="leaveType" required>
+                <option value="ANNUAL_LEAVE">Annual Leave</option>
+                <option value="SICK_LEAVE">Sick Leave</option>
+                <option value="MATERNITY">Maternity Leave</option>
+                <option value="UNPAID">Unpaid Leave</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small">Start Date</label>
+              <input type="date" class="form-control form-control-sm" 
+                     formControlName="startDate" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small">End Date</label>
+              <input type="date" class="form-control form-control-sm" 
+                     formControlName="endDate" required>
+            </div>
+            <div class="mb-3">
+              <textarea class="form-control form-control-sm" 
+                        formControlName="reason" placeholder="Reason for leave" 
+                        rows="2" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-warning btn-sm w-100" 
+                    [disabled]="!leaveRequestForm.valid">
+              <i class="fas fa-paper-plane"></i> Submit Request
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Upload Section -->
+  <div class="row mb-4">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-camera me-2"></i>Update Profile Photo
+          </h5>
+        </div>
+        <div class="card-body text-center">
+          <div class="mb-3">
+            <img 
+              [src]="getEmployeePhotoUrl(currentUser?.employeeCode)" 
+              class="rounded-circle mb-3" 
+              width="100" 
+              height="100" 
+              alt="Current Photo"
+              *ngIf="currentUser?.employeeCode"
+              (error)="$event.target.src='/assets/images/default-avatar.png'">
+          </div>
+          <input type="file" #photoFileInput class="form-control mb-3" 
+                 accept="image/*" (change)="uploadEmployeePhoto($event.target.files[0])">
+          <small class="text-muted">
+            Supported formats: JPG, PNG, GIF, WebP (Max: 10MB)
+          </small>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-upload me-2"></i>General File Upload
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <select class="form-select" #fileTypeSelect>
+              <option value="GENERAL">General Image</option>
+              <option value="DOCUMENT">Document</option>
+              <option value="REPORT">Report</option>
+            </select>
+          </div>
+          <input type="file" class="form-control mb-3" 
+                 accept="image/*" 
+                 (change)="onFileSelected($event, fileTypeSelect.value)">
+          <small class="text-muted">
+            Upload images for various purposes
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Data Tables -->
+  <div class="row">
+    <!-- Recent Employees -->
+    <div class="col-lg-6 mb-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-users me-2"></i>Recent Employees
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Department</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let employee of employees | slice:0:5">
+                  <td>{{ employee.employeeCode }}</td>
+                  <td>{{ employee.fullName }}</td>
+                  <td>{{ employee.departmentName || 'N/A' }}</td>
+                  <td>
+                    <span class="badge" 
+                          [class]="employee.isActive ? 'bg-success' : 'bg-secondary'">
+                      {{ employee.isActive ? 'Active' : 'Inactive' }}
+                    </span>
+                  </td>
+                </tr>
+                <tr *ngIf="employees.length === 0">
+                  <td colspan="4" class="text-center text-muted">No employees found</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's Work Shifts -->
+    <div class="col-lg-6 mb-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-clock me-2"></i>Today's Shifts
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Time</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let shift of workShifts | slice:0:5">
+                  <td>{{ shift.employeeName }}</td>
+                  <td>
+                    {{ formatTime(shift.startTime) }} - {{ formatTime(shift.endTime) }}
+                  </td>
+                  <td>{{ shift.workLocationName || 'TBD' }}</td>
+                  <td>
+                    <span class="badge" 
+                          [class]="shift.isActive ? 'bg-primary' : 'bg-secondary'">
+                      {{ shift.isActive ? 'Active' : 'Inactive' }}
+                    </span>
+                  </td>
+                </tr>
+                <tr *ngIf="workShifts.length === 0">
+                  <td colspan="4" class="text-center text-muted">No shifts for today</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- Loading Overlay -->
-<div class="loading-overlay" *ngIf="isLoading">
-  <div class="loading-content">
-    <div class="loading-spinner">
-      <div class="spinner-ring"></div>
-      <div class="spinner-ring"></div>
-      <div class="spinner-ring"></div>
+<!-- Not Authenticated Message -->
+<div class="container-fluid text-center py-5" *ngIf="!isAuthenticated()">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <i class="fas fa-lock fa-4x text-muted mb-4"></i>
+      <h2>Access Denied</h2>
+      <p class="text-muted">Please log in to access the dashboard.</p>
+      <a href="/auth/login" class="btn btn-primary">
+        <i class="fas fa-sign-in-alt"></i> Login
+      </a>
     </div>
-    <div class="loading-text">Đang tải dữ liệu...</div>
   </div>
 </div>

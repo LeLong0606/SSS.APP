@@ -1,39 +1,125 @@
-import { HttpInterceptorFn, HttpRequest, HttpHandlerFn, HttpEvent } from '@angular/common/http';
-import { inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Injectable } from '@angular/core';
+import {
+  HttpInterceptor,
+  HttpRequest,
+  HttpHandler,
+  HttpEvent,
+  HttpErrorResponse
+} from '@angular/common/http';
+import { Observable, throwError, BehaviorSubject } from 'rxjs';
+import { catchError, filter, take, switchMap } from 'rxjs/operators';
+import { Router } from '@angular/router';
 
 import { AuthService } from '../services/auth.service';
-import { environment } from '../../../environments/environment';
 
-export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn): Observable<HttpEvent<unknown>> => {
-  // Get stored token
-  const authService = inject(AuthService);
-  const token = authService.getStoredToken();
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  private isRefreshing = false;
+  private refreshTokenSubject: BehaviorSubject<string | null> = new BehaviorSubject<string | null>(null);
 
-  // Set default headers
-  let headers = req.headers;
-  
-  // Ensure Content-Type is set for POST/PUT requests
-  if ((req.method === 'POST' || req.method === 'PUT') && !headers.has('Content-Type')) {
-    headers = headers.set('Content-Type', 'application/json');
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+
+  intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Add auth header if user is authenticated
+    if (this.authService.isAuthenticated()) {
+      request = this.addTokenHeader(request, this.authService.getStoredToken());
+    }
+
+    return next.handle(request).pipe(
+      catchError((error: HttpErrorResponse) => {
+        // Handle 401 unauthorized errors
+        if (error.status === 401 && this.authService.isAuthenticated()) {
+          return this.handle401Error(request, next);
+        }
+
+        // Handle other errors
+        return this.handleError(error);
+      })
+    );
   }
 
-  // Add authorization header if token exists and not in skip list
-  if (token && !shouldSkipAuth(req.url)) {
-    headers = headers.set('Authorization', `Bearer ${token}`);
+  private addTokenHeader(request: HttpRequest<any>, token: string | null): HttpRequest<any> {
+    if (token) {
+      return request.clone({
+        headers: request.headers.set('Authorization', `Bearer ${token}`)
+      });
+    }
+    return request;
   }
 
-  // Clone request with updated headers
-  const authReq = req.clone({ headers });
-  return next(authReq);
-};
+  private handle401Error(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    if (!this.isRefreshing) {
+      this.isRefreshing = true;
+      this.refreshTokenSubject.next(null);
 
-function shouldSkipAuth(url: string): boolean {
-  const skipUrls = [
-    '/auth/login',
-    '/auth/register',
-    '/auth/refresh-token'
-  ];
+      const refreshToken = this.authService.getStoredRefreshToken();
+      if (refreshToken) {
+        return this.authService.refreshToken().pipe(
+          switchMap((authResponse: any) => {
+            this.isRefreshing = false;
+            
+            if (authResponse.success && authResponse.token) {
+              this.refreshTokenSubject.next(authResponse.token);
+              return next.handle(this.addTokenHeader(request, authResponse.token));
+            } else {
+              this.authService.logout().subscribe();
+              return throwError(() => new Error('Token refresh failed'));
+            }
+          }),
+          catchError((error) => {
+            this.isRefreshing = false;
+            this.authService.logout().subscribe();
+            return throwError(() => error);
+          })
+        );
+      } else {
+        this.isRefreshing = false;
+        this.authService.logout().subscribe();
+        return throwError(() => new Error('No refresh token available'));
+      }
+    }
 
-  return skipUrls.some(skipUrl => url.includes(skipUrl));
+    return this.refreshTokenSubject.pipe(
+      filter(token => token !== null),
+      take(1),
+      switchMap((token) => next.handle(this.addTokenHeader(request, token)))
+    );
+  }
+
+  private handleError(error: HttpErrorResponse): Observable<never> {
+    let errorMessage = 'An error occurred';
+
+    if (error.error instanceof ErrorEvent) {
+      // Client-side error
+      errorMessage = `Error: ${error.error.message}`;
+    } else {
+      // Server-side error
+      switch (error.status) {
+        case 400:
+          errorMessage = 'Bad Request - Please check your input';
+          break;
+        case 403:
+          errorMessage = 'Forbidden - You don\'t have permission to access this resource';
+          break;
+        case 404:
+          errorMessage = 'Not Found - The requested resource was not found';
+          break;
+        case 500:
+          errorMessage = 'Internal Server Error - Please try again later';
+          break;
+        default:
+          if (error.error && error.error.message) {
+            errorMessage = error.error.message;
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+      }
+    }
+
+    console.error('HTTP Error:', errorMessage, error);
+    return throwError(() => error);
+  }
 }

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
+using System.ComponentModel;
 
 namespace SSS.BE.Models.Image;
 
@@ -8,10 +9,56 @@ namespace SSS.BE.Models.Image;
 /// </summary>
 public class ImageUploadRequest
 {
+    [Required]
+    [Description("Image file to upload")]
     public IFormFile File { get; set; } = null!;
+    
+    [Required]
+    [MaxLength(50)]
+    [Description("Type of file (e.g., EMPLOYEE_PHOTO, ATTENDANCE_PHOTO, LEAVE_ATTACHMENT)")]
     public string FileType { get; set; } = string.Empty;
+    
+    [MaxLength(500)]
+    [Description("Optional description of the file")]
     public string? Description { get; set; }
+    
     public Dictionary<string, object>? Metadata { get; set; }
+}
+
+/// <summary>
+/// Request for uploading attendance photo
+/// </summary>
+public class AttendancePhotoRequest
+{
+    [Required]
+    [Description("Photo file to upload")]
+    public IFormFile PhotoFile { get; set; } = null!;
+    
+    [Required]
+    [MaxLength(20)]
+    [Description("Type of attendance photo (CHECK_IN, CHECK_OUT)")]
+    public string PhotoType { get; set; } = string.Empty;
+    
+    [Description("Optional ID of related attendance event")]
+    public int? AttendanceEventId { get; set; }
+    
+    [Description("GPS latitude coordinate")]
+    public decimal? Latitude { get; set; }
+    
+    [Description("GPS longitude coordinate")]
+    public decimal? Longitude { get; set; }
+    
+    [MaxLength(255)]
+    [Description("Location description")]
+    public string? Location { get; set; }
+    
+    [MaxLength(500)]
+    [Description("Device information")]
+    public string? DeviceInfo { get; set; }
+    
+    [MaxLength(1000)]
+    [Description("Additional notes")]
+    public string? Notes { get; set; }
 }
 
 public class ImageFileDto
@@ -86,32 +133,9 @@ public class LeaveRequestAttachmentDto
     public string? ApprovalNotes { get; set; }
 }
 
-public class AttendancePhotoRequest
-{
-    public IFormFile PhotoFile { get; set; } = null!;
-    public string PhotoType { get; set; } = string.Empty; // CHECK_IN, CHECK_OUT, etc.
-    public int? AttendanceEventId { get; set; }
-    public decimal? Latitude { get; set; }
-    public decimal? Longitude { get; set; }
-    public string? Location { get; set; }
-    public string? DeviceInfo { get; set; }
-    public string? Notes { get; set; }
-}
-
-public class ImageValidationResult
-{
-    public bool IsValid { get; set; }
-    public List<string> Errors { get; set; } = new();
-    public string? FileType { get; set; }
-    public long? FileSize { get; set; }
-    public int? Width { get; set; }
-    public int? Height { get; set; }
-    public bool IsImage { get; set; }
-    public bool IsSupportedFormat { get; set; }
-    public bool IsSizeAcceptable { get; set; }
-    public bool IsDimensionAcceptable { get; set; }
-}
-
+/// <summary>
+/// Image statistics overview
+/// </summary>
 public class ImageStatistics
 {
     public int TotalImages { get; set; }
@@ -128,11 +152,14 @@ public class ImageStatistics
     public int AttendancePhotosThisWeek { get; set; }
     public int AttendancePhotosThisMonth { get; set; }
     public int LeaveAttachmentsThisMonth { get; set; }
-    public DateTime LastImageUpload { get; set; }
+    public DateTime? LastImageUpload { get; set; }
     public string? LastUploadedBy { get; set; }
     public List<TopUploaderDto> TopUploaders { get; set; } = new();
 }
 
+/// <summary>
+/// Top uploader statistics
+/// </summary>
 public class TopUploaderDto
 {
     public string EmployeeCode { get; set; } = string.Empty;

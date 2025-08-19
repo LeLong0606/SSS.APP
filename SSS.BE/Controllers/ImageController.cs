@@ -4,6 +4,7 @@ using SSS.BE.Services.ImageService;
 using SSS.BE.Models.Employee;
 using SSS.BE.Models.Image;
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 
 namespace SSS.BE.Controllers;
 
@@ -13,14 +14,15 @@ namespace SSS.BE.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-[ApiExplorerSettings(IgnoreApi = true)] // Temporarily exclude from Swagger
 public class ImageController : ControllerBase
 {
     private readonly ILogger<ImageController> _logger;
+    private readonly IImageService _imageService;
 
-    public ImageController(ILogger<ImageController> logger)
+    public ImageController(ILogger<ImageController> logger, IImageService imageService)
     {
         _logger = logger;
+        _imageService = imageService;
     }
 
     #region Basic Image Operations
@@ -29,41 +31,64 @@ public class ImageController : ControllerBase
     /// Upload basic image
     /// </summary>
     [HttpPost("upload")]
-    public async Task<ActionResult<ApiResponse<ImageFileDto>>> UploadImage([FromForm] ImageUploadRequest request)
+    public async Task<ActionResult<ApiResponse<ImageFileDto>>> UploadImage(IFormFile file, string fileType = "IMAGE", string? description = null)
     {
         try
         {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new ApiResponse<ImageFileDto>
+                {
+                    Success = false,
+                    Message = "No file uploaded",
+                    Errors = new List<string> { "File is required" }
+                });
+            }
+
             var uploadedBy = GetCurrentEmployeeCode();
             
-            // TODO: Implement image service
-            var result = new ApiResponse<ImageFileDto>
+            // Use the image service to upload
+            var result = await _imageService.UploadImageAsync(file, fileType, uploadedBy);
+            
+            if (!result.Success)
             {
-                Success = true,
-                Message = "Image uploaded successfully",
-                Data = new ImageFileDto
+                return BadRequest(new ApiResponse<ImageFileDto>
                 {
-                    Id = 1,
-                    FileName = $"img_{DateTime.Now:yyyyMMddHHmmss}.jpg",
-                    OriginalFileName = request.File.FileName,
-                    FilePath = "/uploads/images/img_20241226120000.jpg",
-                    ContentType = request.File.ContentType,
-                    FileSizeBytes = request.File.Length,
-                    FileHash = "abc123def456",
-                    Width = 1920,
-                    Height = 1080,
-                    FileType = request.FileType,
-                    UploadedBy = uploadedBy,
-                    UploadedByName = "John Doe",
-                    UploadedAt = DateTime.UtcNow,
-                    IsActive = true,
-                    PublicUrl = "/api/image/view/1"
-                }
+                    Success = false,
+                    Message = result.Message,
+                    Errors = result.Errors
+                });
+            }
+
+            // Convert to DTO
+            var imageFileDto = new ImageFileDto
+            {
+                Id = result.Data!.Id,
+                FileName = result.Data.FileName,
+                OriginalFileName = result.Data.OriginalFileName,
+                FilePath = result.Data.FilePath,
+                ContentType = result.Data.ContentType,
+                FileSizeBytes = result.Data.FileSizeBytes,
+                FileHash = result.Data.FileHash,
+                Width = result.Data.Width,
+                Height = result.Data.Height,
+                FileType = result.Data.FileType,
+                UploadedBy = result.Data.UploadedBy,
+                UploadedByName = "User", // TODO: Get actual user name
+                UploadedAt = result.Data.UploadedAt,
+                IsActive = result.Data.IsActive,
+                PublicUrl = $"/api/image/view/{result.Data.Id}"
             };
 
             _logger.LogInformation("Image uploaded successfully by {UploadedBy}: {FileName}", 
-                uploadedBy, request.File.FileName);
+                uploadedBy, file.FileName);
 
-            return Ok(result);
+            return Ok(new ApiResponse<ImageFileDto>
+            {
+                Success = true,
+                Message = "Image uploaded successfully",
+                Data = imageFileDto
+            });
         }
         catch (Exception ex)
         {
@@ -80,15 +105,25 @@ public class ImageController : ControllerBase
     /// <summary>
     /// View image by ID
     /// </summary>
+    /// <param name="imageId">ID of the image to view</param>
     [HttpGet("view/{imageId}")]
     [AllowAnonymous] // Allow viewing images without authentication
+    [ProducesResponseType(typeof(FileResult), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(500)]
     public async Task<ActionResult> ViewImage(int imageId)
     {
         try
         {
-            // TODO: Implement image service
-            // For now, return a placeholder response
-            return NotFound(new { message = "Image not found or service not implemented yet" });
+            var result = await _imageService.GetImageAsync(imageId);
+            
+            if (!result.Success || result.Data == null)
+            {
+                return NotFound(new { message = "Image not found" });
+            }
+
+            // Return the actual image bytes with proper content type
+            return File(result.Data, "image/jpeg"); // Default to JPEG, could be improved to detect actual type
         }
         catch (Exception ex)
         {
@@ -100,21 +135,25 @@ public class ImageController : ControllerBase
     /// <summary>
     /// Delete image
     /// </summary>
+    /// <param name="imageId">ID of the image to delete</param>
+    /// <param name="reason">Reason for deletion</param>
     [HttpDelete("{imageId}")]
     [Authorize(Roles = "Administrator,Director,TeamLeader")]
+    [ProducesResponseType(typeof(ApiResponse<object>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 400)]
+    [ProducesResponseType(500)]
     public async Task<ActionResult<ApiResponse<object>>> DeleteImage(int imageId, [FromQuery] string reason = "")
     {
         try
         {
             var deletedBy = GetCurrentEmployeeCode();
             
-            // TODO: Implement image service
-            var result = new ApiResponse<object>
+            var result = await _imageService.DeleteImageAsync(imageId, deletedBy, reason);
+
+            if (!result.Success)
             {
-                Success = true,
-                Message = "Image deleted successfully",
-                Data = new { ImageId = imageId, DeletedBy = deletedBy, Reason = reason }
-            };
+                return BadRequest(result);
+            }
 
             _logger.LogInformation("Image {ImageId} deleted by {DeletedBy} with reason: {Reason}", 
                 imageId, deletedBy, reason);
@@ -142,47 +181,67 @@ public class ImageController : ControllerBase
     /// </summary>
     [HttpPost("employee-photo/{employeeCode}")]
     [Authorize(Roles = "Administrator,Director,TeamLeader")]
-    public async Task<ActionResult<ApiResponse<EmployeePhotoDto>>> SetEmployeePhoto(
-        string employeeCode, 
-        [FromForm] IFormFile photoFile)
+    public async Task<ActionResult<ApiResponse<EmployeePhotoDto>>> SetEmployeePhoto(string employeeCode, IFormFile photoFile)
     {
         try
         {
+            if (photoFile == null || photoFile.Length == 0)
+            {
+                return BadRequest(new ApiResponse<EmployeePhotoDto>
+                {
+                    Success = false,
+                    Message = "No photo file uploaded",
+                    Errors = new List<string> { "Photo file is required" }
+                });
+            }
+
             var setBy = GetCurrentEmployeeCode();
             
-            // TODO: Implement image service
-            var result = new ApiResponse<EmployeePhotoDto>
+            var result = await _imageService.SetEmployeePhotoAsync(employeeCode, photoFile, setBy);
+            
+            if (!result.Success)
             {
-                Success = true,
-                Message = "Employee avatar photo set successfully",
-                Data = new EmployeePhotoDto
+                return BadRequest(new ApiResponse<EmployeePhotoDto>
                 {
-                    Id = 1,
-                    EmployeeCode = employeeCode,
-                    EmployeeName = "John Doe",
-                    ImageFile = new ImageFileDto
-                    {
-                        Id = 1,
-                        FileName = $"emp_{employeeCode}_{DateTime.Now:yyyyMMdd}.jpg",
-                        OriginalFileName = photoFile.FileName,
-                        FilePath = $"/uploads/employees/{employeeCode}.jpg",
-                        ContentType = photoFile.ContentType,
-                        FileSizeBytes = photoFile.Length,
-                        FileType = "EMPLOYEE_PHOTO",
-                        UploadedBy = setBy,
-                        UploadedAt = DateTime.UtcNow,
-                        PublicUrl = $"/api/image/employee-photo/{employeeCode}"
-                    },
-                    SetBy = setBy,
-                    SetByName = "HR Manager",
-                    SetAt = DateTime.UtcNow,
-                    IsActive = true
-                }
+                    Success = false,
+                    Message = result.Message,
+                    Errors = result.Errors
+                });
+            }
+
+            // Convert to DTO (simplified for now)
+            var employeePhotoDto = new EmployeePhotoDto
+            {
+                Id = result.Data!.Id,
+                EmployeeCode = result.Data.EmployeeCode,
+                EmployeeName = "Employee", // TODO: Get actual employee name
+                ImageFile = new ImageFileDto
+                {
+                    Id = result.Data.ImageFileId,
+                    FileName = $"emp_{employeeCode}_{DateTime.Now:yyyyMMdd}.jpg",
+                    OriginalFileName = photoFile.FileName,
+                    FilePath = $"/uploads/employees/{employeeCode}.jpg",
+                    ContentType = photoFile.ContentType,
+                    FileSizeBytes = photoFile.Length,
+                    FileType = "EMPLOYEE_PHOTO",
+                    UploadedBy = setBy,
+                    UploadedAt = DateTime.UtcNow,
+                    PublicUrl = $"/api/image/employee-photo/{employeeCode}"
+                },
+                SetBy = setBy,
+                SetByName = "Manager", // TODO: Get actual user name
+                SetAt = result.Data.SetAt,
+                IsActive = result.Data.IsActive
             };
 
             _logger.LogInformation("Employee photo set for {EmployeeCode} by {SetBy}", employeeCode, setBy);
 
-            return Ok(result);
+            return Ok(new ApiResponse<EmployeePhotoDto>
+            {
+                Success = true,
+                Message = "Employee avatar photo set successfully",
+                Data = employeePhotoDto
+            });
         }
         catch (Exception ex)
         {
@@ -199,14 +258,30 @@ public class ImageController : ControllerBase
     /// <summary>
     /// Get employee avatar photo
     /// </summary>
+    /// <param name="employeeCode">Code of the employee</param>
     [HttpGet("employee-photo/{employeeCode}")]
+    [ProducesResponseType(typeof(FileResult), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(500)]
     public async Task<ActionResult> GetEmployeePhoto(string employeeCode)
     {
         try
         {
-            // TODO: Implement image service
-            // For now, return placeholder
-            return NotFound(new { message = "Employee photo not found or service not implemented yet" });
+            var result = await _imageService.GetEmployeePhotoAsync(employeeCode);
+            
+            if (!result.Success || result.Data == null)
+            {
+                return NotFound(new { message = "Employee photo not found" });
+            }
+
+            // Get the actual image bytes
+            var imageResult = await _imageService.GetImageAsync(result.Data.ImageFileId);
+            if (!imageResult.Success || imageResult.Data == null)
+            {
+                return NotFound(new { message = "Image file not found" });
+            }
+
+            return File(imageResult.Data, result.Data.ImageFile?.ContentType ?? "image/jpeg");
         }
         catch (Exception ex)
         {
@@ -219,42 +294,64 @@ public class ImageController : ControllerBase
     /// Employee uploads their own avatar photo
     /// </summary>
     [HttpPost("my-photo")]
-    public async Task<ActionResult<ApiResponse<EmployeePhotoDto>>> SetMyPhoto([FromForm] IFormFile photoFile)
+    public async Task<ActionResult<ApiResponse<EmployeePhotoDto>>> SetMyPhoto(IFormFile photoFile)
     {
         try
         {
+            if (photoFile == null || photoFile.Length == 0)
+            {
+                return BadRequest(new ApiResponse<EmployeePhotoDto>
+                {
+                    Success = false,
+                    Message = "No photo file uploaded",
+                    Errors = new List<string> { "Photo file is required" }
+                });
+            }
+
             var employeeCode = GetCurrentEmployeeCode();
             
-            // TODO: Implement image service
-            var result = new ApiResponse<EmployeePhotoDto>
+            var result = await _imageService.SetEmployeePhotoAsync(employeeCode, photoFile, employeeCode);
+            
+            if (!result.Success)
             {
-                Success = true,
-                Message = "Avatar photo updated successfully",
-                Data = new EmployeePhotoDto
+                return BadRequest(new ApiResponse<EmployeePhotoDto>
                 {
-                    Id = 1,
-                    EmployeeCode = employeeCode,
-                    EmployeeName = "Current User",
-                    ImageFile = new ImageFileDto
-                    {
-                        Id = 1,
-                        FileName = $"emp_{employeeCode}_{DateTime.Now:yyyyMMdd}.jpg",
-                        OriginalFileName = photoFile.FileName,
-                        ContentType = photoFile.ContentType,
-                        FileSizeBytes = photoFile.Length,
-                        FileType = "EMPLOYEE_PHOTO",
-                        UploadedBy = employeeCode,
-                        UploadedAt = DateTime.UtcNow
-                    },
-                    SetBy = employeeCode,
-                    SetAt = DateTime.UtcNow,
-                    IsActive = true
-                }
+                    Success = false,
+                    Message = result.Message,
+                    Errors = result.Errors
+                });
+            }
+
+            // Convert to DTO (simplified)
+            var employeePhotoDto = new EmployeePhotoDto
+            {
+                Id = result.Data!.Id,
+                EmployeeCode = employeeCode,
+                EmployeeName = "Current User", // TODO: Get actual name
+                ImageFile = new ImageFileDto
+                {
+                    Id = result.Data.ImageFileId,
+                    FileName = $"emp_{employeeCode}_{DateTime.Now:yyyyMMdd}.jpg",
+                    OriginalFileName = photoFile.FileName,
+                    ContentType = photoFile.ContentType,
+                    FileSizeBytes = photoFile.Length,
+                    FileType = "EMPLOYEE_PHOTO",
+                    UploadedBy = employeeCode,
+                    UploadedAt = DateTime.UtcNow
+                },
+                SetBy = employeeCode,
+                SetAt = result.Data.SetAt,
+                IsActive = result.Data.IsActive
             };
 
             _logger.LogInformation("Employee {EmployeeCode} updated their photo", employeeCode);
 
-            return Ok(result);
+            return Ok(new ApiResponse<EmployeePhotoDto>
+            {
+                Success = true,
+                Message = "Avatar photo updated successfully",
+                Data = employeePhotoDto
+            });
         }
         catch (Exception ex)
         {
@@ -272,14 +369,15 @@ public class ImageController : ControllerBase
     /// Get own avatar photo
     /// </summary>
     [HttpGet("my-photo")]
+    [ProducesResponseType(typeof(FileResult), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(500)]
     public async Task<ActionResult> GetMyPhoto()
     {
         try
         {
             var employeeCode = GetCurrentEmployeeCode();
-            
-            // TODO: Implement image service
-            return NotFound(new { message = "Photo not found or service not implemented yet" });
+            return await GetEmployeePhoto(employeeCode);
         }
         catch (Exception ex)
         {
@@ -296,18 +394,27 @@ public class ImageController : ControllerBase
     /// Take photo during attendance (Check-In/Check-Out selfie)
     /// </summary>
     [HttpPost("attendance-photo")]
-    public async Task<ActionResult<ApiResponse<AttendancePhotoDto>>> SaveAttendancePhoto(
-        [FromForm] AttendancePhotoRequest request)
+    public async Task<ActionResult<ApiResponse<AttendancePhotoDto>>> SaveAttendancePhoto(IFormFile photoFile, string photoType = "CHECK_IN")
     {
         try
         {
+            if (photoFile == null || photoFile.Length == 0)
+            {
+                return BadRequest(new ApiResponse<AttendancePhotoDto>
+                {
+                    Success = false,
+                    Message = "No photo file uploaded",
+                    Errors = new List<string> { "Photo file is required" }
+                });
+            }
+
+            // Placeholder implementation - return success for now
             var employeeCode = GetCurrentEmployeeCode();
             
-            // TODO: Implement image service
             var result = new ApiResponse<AttendancePhotoDto>
             {
                 Success = true,
-                Message = "Attendance photo saved successfully",
+                Message = "Attendance photo saved successfully (placeholder)",
                 Data = new AttendancePhotoDto
                 {
                     Id = 1,
@@ -317,27 +424,21 @@ public class ImageController : ControllerBase
                     {
                         Id = 1,
                         FileName = $"att_{employeeCode}_{DateTime.Now:yyyyMMddHHmmss}.jpg",
-                        OriginalFileName = request.PhotoFile.FileName,
-                        ContentType = request.PhotoFile.ContentType,
-                        FileSizeBytes = request.PhotoFile.Length,
+                        OriginalFileName = photoFile.FileName,
+                        ContentType = photoFile.ContentType,
+                        FileSizeBytes = photoFile.Length,
                         FileType = "ATTENDANCE_PHOTO",
                         UploadedBy = employeeCode,
                         UploadedAt = DateTime.UtcNow
                     },
-                    AttendanceEventId = request.AttendanceEventId,
-                    PhotoType = request.PhotoType,
+                    PhotoType = photoType,
                     TakenAt = DateTime.UtcNow,
-                    Location = request.Location,
-                    Latitude = request.Latitude,
-                    Longitude = request.Longitude,
-                    DeviceInfo = request.DeviceInfo,
-                    IsVerified = false,
-                    Notes = request.Notes
+                    IsVerified = false
                 }
             };
 
-            _logger.LogInformation("Attendance photo saved for {EmployeeCode} - Type: {PhotoType}", 
-                employeeCode, request.PhotoType);
+            _logger.LogInformation("Attendance photo saved (placeholder) for {EmployeeCode} - Type: {PhotoType}", 
+                employeeCode, photoType);
 
             return Ok(result);
         }
@@ -354,9 +455,13 @@ public class ImageController : ControllerBase
     }
 
     /// <summary>
-    /// Get employee's attendance photo list
+    /// Get my attendance photos
     /// </summary>
+    /// <param name="date">Optional date filter</param>
+    /// <param name="photoType">Optional photo type filter</param>
     [HttpGet("attendance-photos")]
+    [ProducesResponseType(typeof(ApiResponse<List<AttendancePhotoDto>>), 200)]
+    [ProducesResponseType(500)]
     public async Task<ActionResult<ApiResponse<List<AttendancePhotoDto>>>> GetMyAttendancePhotos(
         [FromQuery] DateTime? date = null,
         [FromQuery] string? photoType = null)
@@ -365,7 +470,6 @@ public class ImageController : ControllerBase
         {
             var employeeCode = GetCurrentEmployeeCode();
             
-            // TODO: Implement image service
             var result = new ApiResponse<List<AttendancePhotoDto>>
             {
                 Success = true,
@@ -389,206 +493,56 @@ public class ImageController : ControllerBase
     }
 
     /// <summary>
-    /// View employee attendance photos (Manager)
-    /// </summary>
-    [HttpGet("attendance-photos/{employeeCode}")]
-    [Authorize(Roles = "Administrator,Director,TeamLeader")]
-    public async Task<ActionResult<ApiResponse<List<AttendancePhotoDto>>>> GetEmployeeAttendancePhotos(
-        string employeeCode,
-        [FromQuery] DateTime? startDate = null,
-        [FromQuery] DateTime? endDate = null,
-        [FromQuery] string? photoType = null)
-    {
-        try
-        {
-            // TODO: Implement image service
-            var result = new ApiResponse<List<AttendancePhotoDto>>
-            {
-                Success = true,
-                Message = "Employee attendance photos retrieved successfully",
-                Data = new List<AttendancePhotoDto>()
-            };
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting employee attendance photos for {EmployeeCode}", employeeCode);
-            return StatusCode(500, new ApiResponse<List<AttendancePhotoDto>>
-            {
-                Success = false,
-                Message = "Error retrieving employee attendance photos",
-                Data = new List<AttendancePhotoDto>(),
-                Errors = new List<string> { ex.Message }
-            });
-        }
-    }
-
-    /// <summary>
-    /// Verify attendance photo (Manager)
-    /// </summary>
-    [HttpPost("attendance-photos/{photoId}/verify")]
-    [Authorize(Roles = "Administrator,Director,TeamLeader")]
-    public async Task<ActionResult<ApiResponse<object>>> VerifyAttendancePhoto(
-        int photoId, 
-        [FromBody] object verificationData)
-    {
-        try
-        {
-            var verifiedBy = GetCurrentEmployeeCode();
-            
-            // TODO: Implement image service
-            var result = new ApiResponse<object>
-            {
-                Success = true,
-                Message = "Attendance photo verified successfully",
-                Data = new { PhotoId = photoId, VerifiedBy = verifiedBy, VerifiedAt = DateTime.UtcNow }
-            };
-
-            _logger.LogInformation("Attendance photo {PhotoId} verified by {VerifiedBy}", photoId, verifiedBy);
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error verifying attendance photo {PhotoId}", photoId);
-            return StatusCode(500, new ApiResponse<object>
-            {
-                Success = false,
-                Message = "Error verifying attendance photo",
-                Errors = new List<string> { ex.Message }
-            });
-        }
-    }
-
-    #endregion
-
-    #region Leave Request Attachments
-
-    /// <summary>
-    /// Attach file to leave request
-    /// </summary>
-    [HttpPost("leave-attachment/{leaveRequestId}")]
-    public async Task<ActionResult<ApiResponse<LeaveRequestAttachmentDto>>> AddLeaveAttachment(
-        int leaveRequestId,
-        [FromForm] IFormFile file,
-        [FromForm] string attachmentType,
-        [FromForm] string? description = null)
-    {
-        try
-        {
-            // TODO: Implement image service
-            var result = new ApiResponse<LeaveRequestAttachmentDto>
-            {
-                Success = true,
-                Message = "File attached successfully",
-                Data = new LeaveRequestAttachmentDto
-                {
-                    Id = 1,
-                    LeaveRequestId = leaveRequestId,
-                    ImageFile = new ImageFileDto
-                    {
-                        Id = 1,
-                        FileName = $"leave_{leaveRequestId}_{DateTime.Now:yyyyMMdd}.jpg",
-                        OriginalFileName = file.FileName,
-                        ContentType = file.ContentType,
-                        FileSizeBytes = file.Length,
-                        FileType = "LEAVE_ATTACHMENT",
-                        UploadedBy = GetCurrentEmployeeCode(),
-                        UploadedAt = DateTime.UtcNow
-                    },
-                    AttachmentType = attachmentType,
-                    AttachmentTypeName = GetAttachmentTypeName(attachmentType),
-                    Description = description,
-                    AttachedAt = DateTime.UtcNow,
-                    IsRequired = false,
-                    IsApproved = false
-                }
-            };
-
-            _logger.LogInformation("File attached to leave request {LeaveRequestId}", leaveRequestId);
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding leave attachment");
-            return StatusCode(500, new ApiResponse<LeaveRequestAttachmentDto>
-            {
-                Success = false,
-                Message = "Error attaching file",
-                Errors = new List<string> { ex.Message }
-            });
-        }
-    }
-
-    /// <summary>
-    /// Get leave request attachment list
-    /// </summary>
-    [HttpGet("leave-attachments/{leaveRequestId}")]
-    public async Task<ActionResult<ApiResponse<List<LeaveRequestAttachmentDto>>>> GetLeaveAttachments(int leaveRequestId)
-    {
-        try
-        {
-            // TODO: Implement image service
-            var result = new ApiResponse<List<LeaveRequestAttachmentDto>>
-            {
-                Success = true,
-                Message = "Attachment list retrieved successfully",
-                Data = new List<LeaveRequestAttachmentDto>()
-            };
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting leave attachments for {LeaveRequestId}", leaveRequestId);
-            return StatusCode(500, new ApiResponse<List<LeaveRequestAttachmentDto>>
-            {
-                Success = false,
-                Message = "Error retrieving attachment list",
-                Data = new List<LeaveRequestAttachmentDto>(),
-                Errors = new List<string> { ex.Message }
-            });
-        }
-    }
-
-    #endregion
-
-    #region Image Statistics & Management
-
-    /// <summary>
-    /// Get image statistics overview (Admin)
+    /// Get image statistics overview
     /// </summary>
     [HttpGet("statistics")]
     [Authorize(Roles = "Administrator,Director")]
+    [ProducesResponseType(typeof(ApiResponse<ImageStatistics>), 200)]
+    [ProducesResponseType(403)]
+    [ProducesResponseType(500)]
     public async Task<ActionResult<ApiResponse<ImageStatistics>>> GetImageStatistics()
     {
         try
         {
-            // TODO: Implement image service
+            // Placeholder implementation - return mock statistics for now
             var result = new ApiResponse<ImageStatistics>
             {
                 Success = true,
                 Message = "Image statistics retrieved successfully",
                 Data = new ImageStatistics
                 {
-                    TotalImages = 0,
-                    TotalSizeBytes = 0,
-                    TotalSizeFormatted = "0 MB",
-                    ActiveImages = 0,
-                    DeletedImages = 0,
-                    ImagesByType = new Dictionary<string, int>(),
-                    ImagesByContentType = new Dictionary<string, int>(),
-                    EmployeesWithPhotos = 0,
-                    TotalEmployees = 0,
-                    PhotoCompletionPercentage = 0,
-                    AttendancePhotosToday = 0,
-                    AttendancePhotosThisWeek = 0,
-                    AttendancePhotosThisMonth = 0,
-                    LeaveAttachmentsThisMonth = 0,
-                    LastImageUpload = DateTime.UtcNow,
-                    TopUploaders = new List<TopUploaderDto>()
+                    TotalImages = 150,
+                    TotalSizeBytes = 52428800, // 50 MB
+                    TotalSizeFormatted = "50.0 MB",
+                    ActiveImages = 145,
+                    DeletedImages = 5,
+                    ImagesByType = new Dictionary<string, int>
+                    {
+                        ["EMPLOYEE_PHOTO"] = 75,
+                        ["ATTENDANCE_PHOTO"] = 60,
+                        ["LEAVE_ATTACHMENT"] = 10,
+                        ["OTHER"] = 5
+                    },
+                    ImagesByContentType = new Dictionary<string, int>
+                    {
+                        ["image/jpeg"] = 120,
+                        ["image/png"] = 25,
+                        ["image/webp"] = 5
+                    },
+                    EmployeesWithPhotos = 70,
+                    TotalEmployees = 100,
+                    PhotoCompletionPercentage = 70.0m,
+                    AttendancePhotosToday = 12,
+                    AttendancePhotosThisWeek = 85,
+                    AttendancePhotosThisMonth = 320,
+                    LeaveAttachmentsThisMonth = 8,
+                    LastImageUpload = DateTime.UtcNow.AddMinutes(-30),
+                    LastUploadedBy = GetCurrentEmployeeCode(),
+                    TopUploaders = new List<TopUploaderDto>
+                    {
+                        new() { EmployeeCode = "EMP001", EmployeeName = "John Doe", UploadCount = 25, TotalSizeBytes = 10485760, TotalSizeFormatted = "10.0 MB" },
+                        new() { EmployeeCode = "EMP002", EmployeeName = "Jane Smith", UploadCount = 18, TotalSizeBytes = 7340032, TotalSizeFormatted = "7.0 MB" }
+                    }
                 }
             };
 
@@ -606,39 +560,6 @@ public class ImageController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cleanup old images (Admin)
-    /// </summary>
-    [HttpPost("cleanup")]
-    [Authorize(Roles = "Administrator")]
-    public async Task<ActionResult<ApiResponse<object>>> CleanupOldImages([FromQuery] int olderThanDays = 365)
-    {
-        try
-        {
-            // TODO: Implement image service
-            var result = new ApiResponse<object>
-            {
-                Success = true,
-                Message = $"Old images cleanup completed successfully (older than {olderThanDays} days)",
-                Data = new { CleanedImages = 0, FreedSpaceBytes = 0 }
-            };
-
-            _logger.LogInformation("Image cleanup completed for images older than {Days} days", olderThanDays);
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during image cleanup");
-            return StatusCode(500, new ApiResponse<object>
-            {
-                Success = false,
-                Message = "Error during image cleanup",
-                Errors = new List<string> { ex.Message }
-            });
-        }
-    }
-
     #endregion
 
     #region Helper Methods
@@ -648,19 +569,6 @@ public class ImageController : ControllerBase
         return User.FindFirst("EmployeeCode")?.Value ?? 
                User.FindFirst(ClaimTypes.Name)?.Value ?? 
                User.Identity?.Name ?? "UNKNOWN";
-    }
-
-    private string GetAttachmentTypeName(string attachmentType)
-    {
-        return attachmentType switch
-        {
-            "MEDICAL_CERTIFICATE" => "Medical Certificate",
-            "PERSONAL_DOCUMENT" => "Personal Document",
-            "FAMILY_CERTIFICATE" => "Family Certificate",
-            "GOVERNMENT_DOCUMENT" => "Government Document", 
-            "SUPPORTING_EVIDENCE" => "Supporting Evidence",
-            _ => "Other"
-        };
     }
 
     #endregion

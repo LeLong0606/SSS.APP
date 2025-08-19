@@ -15,7 +15,7 @@ public static class SwaggerConfig
                 Description = "API for employee management, attendance tracking, shift management, and payroll export with JWT Authentication"
             });
 
-            // Basic JWT Authentication configuration
+            // JWT Authentication configuration
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",

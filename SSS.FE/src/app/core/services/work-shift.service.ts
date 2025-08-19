@@ -14,29 +14,31 @@ export class WorkShiftService {
 
   constructor(private http: HttpClient) {}
 
-  // Get all work shifts with pagination
+  // Get all work shifts with pagination - FIXED parameter names to match backend
   getWorkShifts(
-    page: number = 1, 
+    pageNumber: number = 1, 
     pageSize: number = 10, 
     employeeCode?: string,
-    startDate?: string,
-    endDate?: string,
-    locationId?: number // ✅ FIX: NUMBER, not string!
+    fromDate?: string,  // FIXED: Changed from startDate to fromDate
+    toDate?: string,    // FIXED: Changed from endDate to toDate
+    workLocationId?: number,  // FIXED: Changed from locationId to workLocationId
+    includeInactive?: boolean // FIXED: Added missing parameter
   ): Observable<PagedResponse<WorkShift>> {
     let params = new HttpParams()
-      .set('page', page.toString())
+      .set('pageNumber', pageNumber.toString())  // FIXED: Changed from page to pageNumber
       .set('pageSize', pageSize.toString());
 
     if (employeeCode) params = params.set('employeeCode', employeeCode);
-    if (startDate) params = params.set('startDate', startDate);
-    if (endDate) params = params.set('endDate', endDate);
-    if (locationId) params = params.set('locationId', locationId.toString()); // Convert number to string for HTTP param
+    if (fromDate) params = params.set('fromDate', fromDate);      // FIXED: Parameter name
+    if (toDate) params = params.set('toDate', toDate);            // FIXED: Parameter name
+    if (workLocationId) params = params.set('workLocationId', workLocationId.toString()); // FIXED: Parameter name
+    if (includeInactive !== undefined) params = params.set('includeInactive', includeInactive.toString()); // FIXED: Added parameter
 
     return this.http.get<PagedResponse<WorkShift>>(this.API_URL, { params });
   }
 
   // Get work shift by ID
-  getWorkShift(id: number): Observable<ApiResponse<WorkShift>> { // ✅ FIX: NUMBER parameter
+  getWorkShift(id: number): Observable<ApiResponse<WorkShift>> {
     return this.http.get<ApiResponse<WorkShift>>(`${this.API_URL}/${id}`);
   }
 
@@ -74,12 +76,12 @@ export class WorkShiftService {
     return this.http.delete<ApiResponse<void>>(`${this.API_URL}/${id}`);
   }
 
-  // Get weekly shifts for employee
-  getWeeklyShifts(employeeCode: string, weekStart?: string): Observable<ApiResponse<WorkShift[]>> {
+  // FIXED: Get weekly shifts for employee with correct parameter name
+  getWeeklyShifts(employeeCode: string, weekStartDate?: string): Observable<ApiResponse<WorkShift[]>> {
     let url = `${this.API_URL}/weekly/${employeeCode}`;
     
-    if (weekStart) {
-      const params = new HttpParams().set('weekStart', weekStart);
+    if (weekStartDate) {
+      const params = new HttpParams().set('weekStartDate', weekStartDate); // FIXED: Parameter name
       return this.http.get<ApiResponse<WorkShift[]>>(url, { params });
     }
     
@@ -194,5 +196,71 @@ export class WorkShiftService {
       .set('endTime', endTime);
 
     return this.http.get<ApiResponse<WorkShift[]>>(`${this.API_URL}/conflicts`, { params });
+  }
+
+  // ADDED: Additional methods for better integration
+  getMyShifts(fromDate?: string, toDate?: string): Observable<ApiResponse<WorkShift[]>> {
+    let params = new HttpParams();
+    if (fromDate) params = params.set('fromDate', fromDate);
+    if (toDate) params = params.set('toDate', toDate);
+
+    return this.http.get<ApiResponse<WorkShift[]>>(`${this.API_URL}/my`, { params });
+  }
+
+  // ADDED: Validate shift data before submission
+  validateShift(shift: CreateWorkShiftRequest): string[] {
+    const errors: string[] = [];
+
+    if (!shift.employeeCode) {
+      errors.push('Employee code is required');
+    }
+
+    if (!shift.workLocationId) {
+      errors.push('Work location is required');
+    }
+
+    if (!shift.shiftDate) {
+      errors.push('Shift date is required');
+    }
+
+    if (!shift.startTime || !shift.endTime) {
+      errors.push('Start time and end time are required');
+    }
+
+    if (shift.startTime && shift.endTime) {
+      const start = this.timeToMinutes(shift.startTime);
+      const end = this.timeToMinutes(shift.endTime);
+      
+      if (end <= start) {
+        errors.push('End time must be after start time');
+      }
+    }
+
+    return errors;
+  }
+
+  // Helper method to convert time string to minutes
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
+  // Helper method to calculate shift duration
+  calculateShiftDuration(startTime: string, endTime: string): number {
+    const start = this.timeToMinutes(startTime);
+    const end = this.timeToMinutes(endTime);
+    return (end - start) / 60; // Return hours
+  }
+
+  // Helper method to format time for display
+  formatTime(time: string): string {
+    if (!time) return '';
+    
+    const [hours, minutes] = time.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    
+    return `${displayHour}:${minutes} ${ampm}`;
   }
 }
