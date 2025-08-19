@@ -1,149 +1,268 @@
 <div class="auth-container">
   <div class="auth-card">
+    <!-- Header Section -->
     <div class="auth-header">
-      <h1>Đăng ký tài khoản</h1>
-      <p>Tạo tài khoản mới để truy cập hệ thống quản lý nhân viên.</p>
+      <div class="logo-section">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+            <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 9.74s9-4.19 9-9.74V7l-10-5z"/>
+            <circle cx="12" cy="10" r="3"/>
+            <path d="m12 15l-2-2m4 0l-2 2"/>
+          </svg>
+        </div>
+      </div>
+      <h1>Đăng Ký Tài Khoản</h1>
+      <p class="subtitle">Hệ Thống Quản Lý Lịch Làm Việc</p>
+      <p class="description">Tạo tài khoản mới để truy cập hệ thống</p>
     </div>
 
+    <!-- Registration Form -->
     <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="auth-form">
-      <!-- Email Field -->
-      <div class="form-field">
-        <label for="email">Email <span class="required">*</span></label>
-        <input
-          type="email"
-          id="email"
-          formControlName="email"
-          placeholder="Nhập email"
-          [class.error]="isFieldInvalid('email')"
-        />
-        <div class="error-message" *ngIf="isFieldInvalid('email')">
-          {{ getFieldError('email') }}
+      <!-- Two Column Layout for Form Fields -->
+      <div class="form-grid">
+        <!-- Left Column -->
+        <div class="form-column">
+          <!-- Full Name Field -->
+          <div class="form-field">
+            <label for="fullName">Họ và Tên <span class="required">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="fullName"
+                formControlName="fullName"
+                placeholder="Nhập họ và tên đầy đủ"
+                [class.error]="isFieldInvalid('fullName')"
+                required
+              />
+            </div>
+            <div class="error-message" *ngIf="isFieldInvalid('fullName')">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ getFieldError('fullName') }}</span>
+            </div>
+          </div>
+
+          <!-- Email Field -->
+          <div class="form-field">
+            <label for="email">Địa Chỉ Email <span class="required">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="email"
+                id="email"
+                formControlName="email"
+                placeholder="Nhập địa chỉ email"
+                [class.error]="isFieldInvalid('email')"
+                autocomplete="email"
+                required
+              />
+            </div>
+            <div class="error-message" *ngIf="isFieldInvalid('email')">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ getFieldError('email') }}</span>
+            </div>
+          </div>
+
+          <!-- Employee Code Field -->
+          <div class="form-field">
+            <label for="employeeCode">Mã Nhân Viên</label>
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="employeeCode"
+                formControlName="employeeCode"
+                placeholder="Nhập mã nhân viên (tùy chọn)"
+                [class.error]="isFieldInvalid('employeeCode')"
+              />
+            </div>
+            <div class="error-message" *ngIf="isFieldInvalid('employeeCode')">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ getFieldError('employeeCode') }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="form-column">
+          <!-- Password Field -->
+          <div class="form-field">
+            <label for="password">Mật Khẩu <span class="required">*</span></label>
+            <div class="input-wrapper">
+              <div class="password-input">
+                <input
+                  [type]="hidePassword ? 'password' : 'text'"
+                  id="password"
+                  formControlName="password"
+                  placeholder="Tối thiểu 6 ký tự"
+                  [class.error]="isFieldInvalid('password')"
+                  autocomplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  (click)="togglePasswordVisibility()"
+                  [attr.aria-label]="hidePassword ? 'Hiển thị mật khẩu' : 'Ẩn mật khẩu'"
+                >
+                  <svg *ngIf="!hidePassword" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clip-rule="evenodd" />
+                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                  </svg>
+                  <svg *ngIf="hidePassword" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="error-message" *ngIf="isFieldInvalid('password')">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ getFieldError('password') }}</span>
+            </div>
+          </div>
+
+          <!-- Confirm Password Field -->
+          <div class="form-field">
+            <label for="confirmPassword">Xác Nhận Mật Khẩu <span class="required">*</span></label>
+            <div class="input-wrapper">
+              <div class="password-input">
+                <input
+                  [type]="hideConfirmPassword ? 'password' : 'text'"
+                  id="confirmPassword"
+                  formControlName="confirmPassword"
+                  placeholder="Nhập lại mật khẩu"
+                  [class.error]="isFieldInvalid('confirmPassword')"
+                  autocomplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  (click)="toggleConfirmPasswordVisibility()"
+                  [attr.aria-label]="hideConfirmPassword ? 'Hiển thị mật khẩu' : 'Ẩn mật khẩu'"
+                >
+                  <svg *ngIf="!hideConfirmPassword" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clip-rule="evenodd" />
+                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                  </svg>
+                  <svg *ngIf="hideConfirmPassword" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="error-message" *ngIf="isFieldInvalid('confirmPassword')">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ getFieldError('confirmPassword') }}</span>
+            </div>
+          </div>
+
+          <!-- Role Field -->
+          <div class="form-field">
+            <label for="role">Vai Trò <span class="required">*</span></label>
+            <div class="input-wrapper">
+              <select
+                id="role"
+                formControlName="role"
+                [class.error]="isFieldInvalid('role')"
+                required
+              >
+                <option value="" disabled>Chọn vai trò</option>
+                <option *ngFor="let role of availableRoles" [value]="role.value">
+                  {{ role.label }}
+                </option>
+              </select>
+              <div class="select-arrow">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <div class="error-message" *ngIf="isFieldInvalid('role')">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ getFieldError('role') }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Password Field -->
-      <div class="form-field">
-        <label for="password">Mật khẩu <span class="required">*</span></label>
-        <div class="password-input">
-          <input
-            [type]="hidePassword ? 'password' : 'text'"
-            id="password"
-            formControlName="password"
-            placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
-            [class.error]="isFieldInvalid('password')"
+      <!-- Accept Terms Checkbox - Full Width -->
+      <div class="form-field checkbox-field full-width">
+        <div class="checkbox-wrapper">
+          <input 
+            type="checkbox" 
+            id="acceptTerms"
+            formControlName="acceptTerms"
+            required
           />
-          <button
-            type="button"
-            class="password-toggle"
-            (click)="togglePasswordVisibility()"
-          >
-            <span>{{ hidePassword ? '👁️' : '🙈' }}</span>
-          </button>
+          <label for="acceptTerms">
+            Tôi đồng ý với <a href="#" target="_blank">điều khoản và điều kiện</a> <span class="required">*</span>
+          </label>
         </div>
-        <div class="error-message" *ngIf="isFieldInvalid('password')">
-          {{ getFieldError('password') }}
-        </div>
-      </div>
-
-      <!-- Confirm Password Field -->
-      <div class="form-field">
-        <label for="confirmPassword">Xác nhận mật khẩu <span class="required">*</span></label>
-        <div class="password-input">
-          <input
-            [type]="hideConfirmPassword ? 'password' : 'text'"
-            id="confirmPassword"
-            formControlName="confirmPassword"
-            placeholder="Nhập lại mật khẩu"
-            [class.error]="isFieldInvalid('confirmPassword')"
-          />
-          <button
-            type="button"
-            class="password-toggle"
-            (click)="toggleConfirmPasswordVisibility()"
-          >
-            <span>{{ hideConfirmPassword ? '👁️' : '🙈' }}</span>
-          </button>
-        </div>
-        <div class="error-message" *ngIf="isFieldInvalid('confirmPassword')">
-          {{ getFieldError('confirmPassword') }}
-        </div>
-      </div>
-
-      <!-- Full Name Field -->
-      <div class="form-field">
-        <label for="fullName">Họ và tên <span class="required">*</span></label>
-        <input
-          type="text"
-          id="fullName"
-          formControlName="fullName"
-          placeholder="Nhập họ và tên đầy đủ"
-          [class.error]="isFieldInvalid('fullName')"
-        />
-        <div class="error-message" *ngIf="isFieldInvalid('fullName')">
-          {{ getFieldError('fullName') }}
-        </div>
-      </div>
-
-      <!-- Employee Code Field -->
-      <div class="form-field">
-        <label for="employeeCode">Mã nhân viên</label>
-        <input
-          type="text"
-          id="employeeCode"
-          formControlName="employeeCode"
-          placeholder="Nhập mã nhân viên (tùy chọn)"
-          [class.error]="isFieldInvalid('employeeCode')"
-        />
-        <div class="error-message" *ngIf="isFieldInvalid('employeeCode')">
-          {{ getFieldError('employeeCode') }}
-        </div>
-      </div>
-
-      <!-- Role Field with string values matching backend -->
-      <div class="form-field">
-        <label for="role">Vai trò <span class="required">*</span></label>
-        <select
-          id="role"
-          formControlName="role"
-          [class.error]="isFieldInvalid('role')"
-        >
-          <option *ngFor="let role of availableRoles" [value]="role.value">
-            {{ role.label }}
-          </option>
-        </select>
-        <div class="error-message" *ngIf="isFieldInvalid('role')">
-          {{ getFieldError('role') }}
-        </div>
-      </div>
-
-      <!-- Accept Terms Checkbox -->
-      <div class="form-field checkbox-field">
-        <label class="checkbox-label">
-          <input type="checkbox" formControlName="acceptTerms" />
-          <span class="checkmark"></span>
-          Tôi đồng ý với <a href="#" target="_blank">điều khoản và điều kiện</a> <span class="required">*</span>
-        </label>
         <div class="error-message" *ngIf="isFieldInvalid('acceptTerms')">
-          {{ getFieldError('acceptTerms') }}
+          <svg viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          <span>{{ getFieldError('acceptTerms') }}</span>
         </div>
       </div>
 
       <!-- Submit Button -->
-      <button
-        type="submit"
-        class="btn btn-primary"
-        [disabled]="registerForm.invalid || isLoading"
-      >
-        <span *ngIf="!isLoading">Đăng ký</span>
-        <span *ngIf="isLoading" class="loading-text">
-          <span class="spinner"></span>
-          Đang đăng ký...
-        </span>
-      </button>
+      <div class="form-actions">
+        <button 
+          type="submit" 
+          class="btn btn-primary"
+          [disabled]="registerForm.invalid || isLoading"
+        >
+          <div *ngIf="isLoading" class="loading-content">
+            <div class="spinner"></div>
+            <span>Đang đăng ký...</span>
+          </div>
+          <div *ngIf="!isLoading" class="loading-content">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+              <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
+            </svg>
+            <span>Đăng Ký</span>
+          </div>
+        </button>
+      </div>
 
-      <!-- Links -->
-      <div class="auth-links">
-        <a (click)="navigateToLogin()">Đã có tài khoản? Đăng nhập ngay</a>
+      <!-- Error Alert -->
+      <div class="alert alert-error" role="alert" *ngIf="error">
+        <svg viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <div class="alert-content">
+          <strong>Đăng ký thất bại</strong>
+          <p>{{ error }}</p>
+        </div>
+      </div>
+
+      <!-- Footer Links -->
+      <div class="form-footer">
+        <div class="auth-links">
+          <div class="divider">
+            <span>Đã có tài khoản?</span>
+          </div>
+          
+          <a (click)="navigateToLogin()" class="login-link">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+              <path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            Đăng Nhập Ngay
+          </a>
+        </div>
       </div>
     </form>
   </div>

@@ -96,7 +96,7 @@ export class AuthService {
       confirmPassword: userData.confirmPassword,
       fullName: userData.fullName,
       employeeCode: userData.employeeCode,
-      role: userData.role // Direct assignment, no toString() needed
+      role: userData.role as string
     };
     
     return this.http.post<AuthResponse>(`${this.API_URL}/auth/register`, registerRequest).pipe(
@@ -172,35 +172,15 @@ export class AuthService {
   // Check if user has specific role
   hasRole(role: UserRole | string): boolean {
     const user = this.getCurrentUserSync();
-    if (!user?.roles) return false;
-    
-    // Handle both enum and string types explicitly
-    let roleString: string;
-    if (typeof role === 'string') {
-      roleString = role;
-    } else {
-      // Convert enum to string value
-      roleString = String(role);
-    }
-    
-    return user.roles.includes(roleString);
+    const roleString = typeof role === 'string' ? role : String(role);
+    return user?.roles?.includes(roleString) || false;
   }
 
   // Check if user has any of the specified roles
   hasAnyRole(roles: (UserRole | string)[]): boolean {
     const user = this.getCurrentUserSync();
-    if (!user?.roles) return false;
-    
-    // Explicit type conversion to avoid 'never' inference
-    const roleStrings: string[] = roles.map((role: UserRole | string): string => {
-      if (typeof role === 'string') {
-        return role;
-      } else {
-        return String(role); // Convert enum to string
-      }
-    });
-    
-    return user.roles.some((userRole: string) => roleStrings.includes(userRole));
+    const roleStrings = roles.map(role => typeof role === 'string' ? role : String(role));
+    return user?.roles?.some(userRole => roleStrings.includes(userRole)) || false;
   }
 
   // Check if user has permission

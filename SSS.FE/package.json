@@ -3,8 +3,8 @@
   "version": "2.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "start:https": "ng serve --ssl --host=localhost --port=50503",
+    "start": "ng serve --proxy-config proxy.conf.json",
+    "start:https": "ng serve --ssl --host=localhost --port=50503 --proxy-config proxy.conf.json",
     "start:ip": "ng serve --host=127.0.0.1 --port=50503",
     "build": "ng build",
     "build:prod": "ng build --configuration=production",

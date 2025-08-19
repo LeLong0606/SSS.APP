@@ -1,4 +1,52 @@
-// === MODERN DASHBOARD STYLES ===
+// === EMPLOYEE PHOTO SECTION ===
+.avatar-container {
+  display: inline-block;
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin-bottom: var(--space-3);
+}
+
+.employee-photo {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border: 3px solid var(--color-primary-100);
+  transition: all var(--transition-normal);
+
+  &:hover {
+    border-color: var(--color-primary);
+    transform: scale(1.05);
+  }
+}
+
+.avatar-fallback {
+  background: var(--color-primary-100);
+  color: var(--color-primary);
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  border: 3px solid var(--color-primary-100);
+}
+
+.image-preview-container {
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-gray-50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+
+  .company-image {
+    max-width: 100%;
+    max-height: 180px;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+  }
+}
+
+// === RESPONSIVE DESIGN IMPROVEMENTS ===
 
 .dashboard-container {
   min-height: 100vh;
@@ -744,6 +792,28 @@
 // === ANIMATIONS ===
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.slide-in-up {
+  animation: slideInUp 0.4s ease-out;
 }
 
 // Responsive Design

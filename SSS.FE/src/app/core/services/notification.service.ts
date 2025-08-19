@@ -1,3 +1,5 @@
+// ...existing code...
+// ...imports and interfaces remain...
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, timer } from 'rxjs';
 
@@ -54,16 +56,25 @@ export class NotificationService {
   }
 
   /**
+   * Speak notification aloud using browser speech synthesis
+   */
+  private speakNotification(title: string, message?: string): void {
+    // Audio announcements disabled by request
+    return;
+  }
+
+  /**
    * Show success notification
    */
   showSuccess(title: string, message?: string, options?: Partial<Notification>): string {
+    this.speakNotification(title, message);
     return this.show({
       type: 'success',
       title,
       message,
-      icon: '✅',
-      duration: 5000,
-      priority: 'normal',
+      duration: 8000,
+      priority: 'high',
+      persistent: true,
       ...options
     });
   }
@@ -72,6 +83,7 @@ export class NotificationService {
    * Show error notification
    */
   showError(title: string, message?: string, options?: Partial<Notification>): string {
+    this.speakNotification(title, message);
     return this.show({
       type: 'error',
       title,
@@ -88,6 +100,7 @@ export class NotificationService {
    * Show warning notification
    */
   showWarning(title: string, message?: string, options?: Partial<Notification>): string {
+    this.speakNotification(title, message);
     return this.show({
       type: 'warning',
       title,
@@ -103,6 +116,7 @@ export class NotificationService {
    * Show info notification
    */
   showInfo(title: string, message?: string, options?: Partial<Notification>): string {
+    this.speakNotification(title, message);
     return this.show({
       type: 'info',
       title,

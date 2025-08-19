@@ -20,6 +20,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   isLoading = false;
   hidePassword = true;
   hideConfirmPassword = true;
+  error: string | null = null; // Add error property
 
   // ✅ FIX: Available roles as strings (matching backend exactly)
   availableRoles = [
@@ -93,6 +94,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
   // ✅ FIXED: Send role as string to match backend exactly
   onSubmit(): void {
     if (this.registerForm.valid) {
+      // Clear previous error
+      this.error = null;
       this.isLoading = true;
       
       const formValue = this.registerForm.value;
@@ -135,16 +138,20 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   private handleRegistrationError(message: string, errors: string[] = []): void {
+    let errorMessage = message;
+    
     if (errors && errors.length > 0) {
       // Show first error or combine multiple errors
-      const errorMessage = errors.length === 1 
+      errorMessage = errors.length === 1 
         ? errors[0]
         : `${message}\n• ${errors.join('\n• ')}`;
-      
-      this.notificationService.showError(errorMessage);
-    } else {
-      this.notificationService.showError(message);
     }
+    
+    // Set error for template display
+    this.error = errorMessage;
+    
+    // Also show notification
+    this.notificationService.showError(errorMessage);
     
     // Handle specific validation errors
     if (errors.some(err => err.toLowerCase().includes('email'))) {

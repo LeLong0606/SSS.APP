@@ -1,67 +1,149 @@
 <div class="auth-container">
   <div class="auth-card">
+    <!-- Header Section -->
     <div class="auth-header">
-      <h1>Đăng nhập</h1>
-      <p>Chào mừng trở lại! Vui lòng đăng nhập vào tài khoản của bạn.</p>
+      <div class="logo-section">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
+            <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 9.74s9-4.19 9-9.74V7l-10-5z"/>
+            <circle cx="12" cy="10" r="3"/>
+            <path d="m12 15l-2-2m4 0l-2 2"/>
+          </svg>
+        </div>
+      </div>
+      <h1>Đăng Nhập</h1>
+      <p class="subtitle">Hệ Thống Quản Lý Lịch Làm Việc</p>
+      <p class="description">Chào mừng trở lại! Vui lòng đăng nhập vào tài khoản của bạn</p>
     </div>
 
+    <!-- Login Form -->
     <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="auth-form">
       <!-- Email Field -->
-      <div class="form-field">
-        <label for="email">Email</label>
-        <input
-          type="email"
-          id="email"
-          formControlName="email"
-          placeholder="Nhập email của bạn"
-          [class.error]="isFieldInvalid('email')"
-        />
+      <div class="form-field" [class.success]="loginForm.get('email')?.valid && loginForm.get('email')?.touched">
+        <label for="email">Địa Chỉ Email</label>
+        <div class="input-wrapper" [class.focus]="isEmailFocused">
+          <input
+            id="email"
+            type="email"
+            formControlName="email"
+            placeholder="Nhập địa chỉ email của bạn"
+            [class.error]="isFieldInvalid('email')"
+            (focus)="isEmailFocused = true"
+            (blur)="isEmailFocused = false"
+            autocomplete="email"
+            required
+          />
+        </div>
         <div class="error-message" *ngIf="isFieldInvalid('email')">
-          {{ getFieldError('email') }}
+          <svg viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          <span>{{ getFieldError('email') }}</span>
         </div>
       </div>
 
       <!-- Password Field -->
-      <div class="form-field">
-        <label for="password">Mật khẩu</label>
-        <div class="password-input">
-          <input
-            [type]="hidePassword ? 'password' : 'text'"
-            id="password"
-            formControlName="password"
-            placeholder="Nhập mật khẩu"
-            [class.error]="isFieldInvalid('password')"
-          />
-          <button
-            type="button"
-            class="password-toggle"
-            (click)="togglePasswordVisibility()"
-          >
-            <span>{{ hidePassword ? '👁️' : '🙈' }}</span>
-          </button>
+      <div class="form-field" [class.success]="loginForm.get('password')?.valid && loginForm.get('password')?.touched">
+        <label for="password">Mật Khẩu</label>
+        <div class="input-wrapper" [class.focus]="isPasswordFocused">
+          <div class="password-input">
+            <input
+              id="password"
+              [type]="hidePassword ? 'password' : 'text'"
+              formControlName="password"
+              placeholder="Nhập mật khẩu của bạn"
+              [class.error]="isFieldInvalid('password')"
+              (focus)="isPasswordFocused = true"
+              (blur)="isPasswordFocused = false"
+              autocomplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              (click)="togglePasswordVisibility()"
+              [attr.aria-label]="hidePassword ? 'Hiển thị mật khẩu' : 'Ẩn mật khẩu'"
+            >
+              <svg *ngIf="!hidePassword" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clip-rule="evenodd" />
+                <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+              </svg>
+              <svg *ngIf="hidePassword" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="error-message" *ngIf="isFieldInvalid('password')">
-          {{ getFieldError('password') }}
+          <svg viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          <span>{{ getFieldError('password') }}</span>
+        </div>
+      </div>
+
+      <!-- Remember Me -->
+      <div class="form-field checkbox-field">
+        <div class="checkbox-wrapper">
+          <input 
+            id="rememberMe" 
+            type="checkbox" 
+            formControlName="rememberMe"
+          />
+          <label for="rememberMe">Ghi nhớ tôi trong 30 ngày</label>
         </div>
       </div>
 
       <!-- Submit Button -->
-      <button
-        type="submit"
-        class="btn btn-primary"
-        [disabled]="loginForm.invalid || isLoading"
-      >
-        <span *ngIf="!isLoading">Đăng nhập</span>
-        <span *ngIf="isLoading" class="loading-text">
-          <span class="spinner"></span>
-          Đang đăng nhập...
-        </span>
-      </button>
+      <div class="form-actions">
+        <button 
+          type="submit" 
+          class="btn btn-primary"
+          [disabled]="loginForm.invalid || isLoading"
+        >
+          <div *ngIf="isLoading" class="loading-content">
+            <div class="spinner"></div>
+            <span>Đang đăng nhập...</span>
+          </div>
+          <div *ngIf="!isLoading" class="loading-content">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+              <path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span>Đăng Nhập</span>
+          </div>
+        </button>
+      </div>
 
-      <!-- Links -->
-      <div class="auth-links">
-        <a routerLink="/auth/register">Chưa có tài khoản? Đăng ký ngay</a>
-        <a href="#" class="forgot-password">Quên mật khẩu?</a>
+      <!-- Error Alert -->
+      <div class="alert alert-error" role="alert" *ngIf="error">
+        <svg viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <div class="alert-content">
+          <strong>Đăng nhập thất bại</strong>
+          <p>{{ error }}</p>
+        </div>
+      </div>
+
+      <!-- Footer Links -->
+      <div class="form-footer">
+        <div class="auth-links">
+          <a href="#" class="forgot-password" (click)="onForgotPassword($event)">
+            Quên mật khẩu?
+          </a>
+          
+          <div class="divider">
+            <span>Chưa có tài khoản?</span>
+          </div>
+          
+          <a routerLink="/auth/register" class="register-link">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+              <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
+            </svg>
+            Tạo Tài Khoản Mới
+          </a>
+        </div>
       </div>
     </form>
   </div>

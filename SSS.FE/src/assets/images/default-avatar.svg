@@ -1,0 +1,13 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="50" fill="#f8f9fa"/>
+  
+  <!-- Head -->
+  <circle cx="50" cy="35" r="18" fill="#6c757d"/>
+  
+  <!-- Body -->
+  <path d="M20 85 Q20 65 50 65 Q80 65 80 85 L80 100 L20 100 Z" fill="#6c757d"/>
+  
+  <!-- Optional: Add a subtle border -->
+  <circle cx="50" cy="50" r="49" fill="none" stroke="#dee2e6" stroke-width="2"/>
+</svg>

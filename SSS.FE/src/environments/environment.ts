@@ -1,14 +1,22 @@
 export const environment = {
   production: false,
-  apiUrl: 'https://localhost:5001/api',
+  apiUrl: '/api',
   appName: 'SSS Employee Management',
-  version: '2.0.0',
+  version: '1.0.0',
+  defaultLanguage: 'vi',
+  supportedLanguages: ['vi', 'en'],
   features: {
-    realTimeNotifications: true,
-    darkMode: true,
-    animations: true,
-    analytics: false,
-    offlineMode: false
+    enableNotifications: true,
+    enableDarkMode: true,
+    enableFileUpload: true,
+    enableRealTimeUpdates: false,
+    enableOfflineSupport: false
+  },
+  storage: {
+    tokenKey: 'sss_access_token',
+    refreshTokenKey: 'sss_refresh_token',
+    userKey: 'sss_user_info',
+    settingsKey: 'sss_user_settings'
   },
   api: {
     timeout: 30000,
@@ -16,25 +24,9 @@ export const environment = {
     retryDelay: 1000
   },
   ui: {
-    pageSize: 10,
-    autoSave: true,
-    autoSaveInterval: 30000, // 30 seconds
-    theme: 'light',
-    animation: {
-      duration: 300,
-      easing: 'ease-in-out'
-    }
-  },
-  storage: {
-    tokenKey: 'sss_auth_token',
-    refreshTokenKey: 'sss_refresh_token',
-    userKey: 'sss_current_user',
-    themeKey: 'sss_theme',
-    settingsKey: 'sss_settings'
-  },
-  logging: {
-    level: 'debug',
-    enableConsole: true,
-    enableRemote: false
+    itemsPerPage: 10,
+    debounceTime: 300,
+    animationDuration: 300,
+    toastDuration: 5000
   }
 };
