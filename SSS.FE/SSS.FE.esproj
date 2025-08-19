@@ -2,9 +2,25 @@
   <PropertyGroup>
     <StartupCommand>npm start</StartupCommand>
     <JavaScriptTestFramework>Jasmine</JavaScriptTestFramework>
-    <!-- Allows the build (or compile) script located on package.json to run on Build -->
+    <!-- Disable build script to prevent npm clean from running during Visual Studio build -->
     <ShouldRunBuildScript>false</ShouldRunBuildScript>
+    <!-- Disable npm script execution during build to avoid clean script errors -->
+    <ShouldRunNpmInstall>false</ShouldRunNpmInstall>
     <!-- Folder where production build objects will be placed -->
     <BuildOutputFolder>$(MSBuildProjectDirectory)\dist\SSS.FE\browser\</BuildOutputFolder>
+    <!-- Disable automatic npm script execution that might trigger clean -->
+    <DisableNpmScriptExecution>true</DisableNpmScriptExecution>
   </PropertyGroup>
+  
+  <!-- Define custom build targets that don't rely on npm clean -->
+  <Target Name="EnsureDependencies" BeforeTargets="Build" Condition="!Exists('node_modules')">
+    <Message Text="Installing npm dependencies..." Importance="high" />
+    <Exec Command="npm install --no-optional" ContinueOnError="false" />
+  </Target>
+  
+  <!-- Custom clean target for development -->
+  <Target Name="CleanNodeModules">
+    <Message Text="Cleaning node_modules and package-lock.json..." Importance="high" />
+    <Exec Command="npm run clean" ContinueOnError="true" />
+  </Target>
 </Project>

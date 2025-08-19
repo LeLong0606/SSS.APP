@@ -23,7 +23,7 @@
             height="40" 
             alt="User Avatar"
             *ngIf="currentUser?.employeeCode"
-            (error)="$event.target.src='/assets/images/default-avatar.png'">
+            (error)="onImageError($event)">
           <button class="btn btn-outline-secondary" (click)="logout()">
             <i class="fas fa-sign-out-alt"></i> Logout
           </button>
@@ -303,10 +303,10 @@
               height="100" 
               alt="Current Photo"
               *ngIf="currentUser?.employeeCode"
-              (error)="$event.target.src='/assets/images/default-avatar.png'">
+              (error)="onImageError($event)">
           </div>
           <input type="file" #photoFileInput class="form-control mb-3" 
-                 accept="image/*" (change)="uploadEmployeePhoto($event.target.files[0])">
+                 accept="image/*" (change)="onEmployeePhotoChange($event)">
           <small class="text-muted">
             Supported formats: JPG, PNG, GIF, WebP (Max: 10MB)
           </small>

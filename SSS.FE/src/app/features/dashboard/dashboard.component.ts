@@ -1,49 +1,61 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { takeUntil, finalize } from 'rxjs/operators';
+import { Observable, BehaviorSubject, Subject, takeUntil, combineLatest } from 'rxjs';
 
 import { 
   AuthService,
-  EmployeeService, 
+  EmployeeService,
   DepartmentService,
   WorkShiftService,
-  ImageService,
   AttendanceService,
-  PayrollService,
-  LoadingService
+  ImageService,
+  LoadingService,
+  NotificationService
 } from '../../core/services';
+
+import { UserInfo, UserRole } from '../../core/models/auth.model';
+import { Employee } from '../../core/models/employee.model';
+import { Department } from '../../core/models/department.model';
+import { WorkShift } from '../../core/models/work-shift.model';
+import { AttendanceStatus, CheckInRequest, CheckOutRequest } from '../../core/services/attendance.service';
+
+interface DashboardStats {
+  totalEmployees: number;
+  totalDepartments: number;
+  todayShifts: number;
+  pendingLeaveRequests: number;
+}
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss']
+  styleUrls: ['./dashboard.component.scss'],
+  standalone: false
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
-  
-  // Loading states
+
+  // Observables
   loading$ = this.loadingService.loading$;
+  currentUser: UserInfo | null = null;
   
-  // Data
-  currentUser: any = null;
-  employees: any[] = [];
-  departments: any[] = [];
-  workShifts: any[] = [];
-  attendanceStatus: any = null;
-  
-  // Forms - Initialize with definite assignment assertion
-  employeeForm!: FormGroup;
-  workShiftForm!: FormGroup;
-  leaveRequestForm!: FormGroup;
-  
-  // Statistics
-  dashboardStats = {
+  // Dashboard Data
+  dashboardStats: DashboardStats = {
     totalEmployees: 0,
     totalDepartments: 0,
     todayShifts: 0,
     pendingLeaveRequests: 0
   };
+
+  employees: Employee[] = [];
+  departments: Department[] = [];
+  workShifts: WorkShift[] = [];
+  attendanceStatus: AttendanceStatus | null = null;
+
+  // Forms
+  employeeForm!: FormGroup;
+  workShiftForm!: FormGroup;
+  leaveRequestForm!: FormGroup;
 
   constructor(
     private fb: FormBuilder,
@@ -51,16 +63,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private employeeService: EmployeeService,
     private departmentService: DepartmentService,
     private workShiftService: WorkShiftService,
-    private imageService: ImageService,
     private attendanceService: AttendanceService,
-    private payrollService: PayrollService,
-    private loadingService: LoadingService
+    private imageService: ImageService,
+    private loadingService: LoadingService,
+    private notificationService: NotificationService
   ) {
     this.initializeForms();
   }
 
   ngOnInit(): void {
-    this.loadInitialData();
+    this.loadCurrentUser();
+    this.loadDashboardData();
   }
 
   ngOnDestroy(): void {
@@ -73,288 +86,310 @@ export class DashboardComponent implements OnInit, OnDestroy {
       employeeCode: ['', [Validators.required]],
       fullName: ['', [Validators.required]],
       position: ['', [Validators.required]],
-      departmentId: ['', [Validators.required]],
-      phoneNumber: [''],
-      address: ['']
+      departmentId: ['', [Validators.required]]
     });
 
     this.workShiftForm = this.fb.group({
       employeeCode: ['', [Validators.required]],
-      workLocationId: ['', [Validators.required]],
       shiftDate: ['', [Validators.required]],
       startTime: ['', [Validators.required]],
-      endTime: ['', [Validators.required]]
+      endTime: ['', [Validators.required]],
+      workLocationId: ['', [Validators.required]]
     });
 
     this.leaveRequestForm = this.fb.group({
+      leaveType: ['ANNUAL_LEAVE', [Validators.required]],
       startDate: ['', [Validators.required]],
       endDate: ['', [Validators.required]],
-      leaveType: ['ANNUAL_LEAVE', [Validators.required]],
       reason: ['', [Validators.required]]
     });
   }
 
-  private loadInitialData(): void {
-    // Load current user
-    this.authService.getCurrentUser()
+  private loadCurrentUser(): void {
+    this.authService.authState$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          this.currentUser = response.user;
-        }
+      .subscribe(authState => {
+        this.currentUser = authState.user;
       });
+  }
 
+  private loadDashboardData(): void {
     // Load employees
-    this.loadEmployees();
-    
-    // Load departments
-    this.loadDepartments();
-    
-    // Load work shifts
-    this.loadWorkShifts();
-    
-    // Load attendance status
-    this.loadAttendanceStatus();
-    
-    // Load dashboard statistics
-    this.loadDashboardStats();
-  }
-
-  // Employee Management - FIXED: Use filter object instead of separate arguments
-  loadEmployees(): void {
-    this.employeeService.getEmployees({ pageNumber: 1, pageSize: 50 })
+    this.employeeService.getEmployees({ pageNumber: 1, pageSize: 20 })
       .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          this.employees = response.data;
-          this.dashboardStats.totalEmployees = response.totalCount;
+      .subscribe({
+        next: (response) => {
+          if (response.success) {
+            this.employees = response.data || [];
+            this.dashboardStats.totalEmployees = response.totalCount || 0;
+          }
+        },
+        error: (error) => {
+          console.error('Error loading employees:', error);
         }
       });
-  }
 
-  createEmployee(): void {
-    if (this.employeeForm.valid) {
-      const employeeData = this.employeeForm.value;
-      
-      this.employeeService.createEmployee(employeeData)
-        .pipe(
-          takeUntil(this.destroy$),
-          finalize(() => this.employeeForm.reset())
-        )
-        .subscribe(response => {
-          if (response.success) {
-            console.log('Employee created successfully!');
-            this.loadEmployees(); // Refresh list
-          } else {
-            console.error('Failed to create employee:', response.errors);
-          }
-        });
-    }
-  }
-
-  // Department Management - FIXED: Use filter object instead of separate arguments
-  loadDepartments(): void {
+    // Load departments
     this.departmentService.getDepartments({ pageNumber: 1, pageSize: 20 })
       .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          this.departments = response.data;
-          this.dashboardStats.totalDepartments = response.totalCount;
-        }
-      });
-  }
-
-  // Work Shift Management - Fixed method calls
-  loadWorkShifts(): void {
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Fixed: Use correct parameter names for the service method
-    this.workShiftService.getWorkShifts(1, 50, undefined, today, today)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          this.workShifts = response.data;
-          this.dashboardStats.todayShifts = response.totalCount;
-        }
-      });
-  }
-
-  createWorkShift(): void {
-    if (this.workShiftForm.valid) {
-      const shiftData = {
-        ...this.workShiftForm.value,
-        shiftDate: new Date(this.workShiftForm.value.shiftDate),
-        workLocationId: Number(this.workShiftForm.value.workLocationId)
-      };
-      
-      this.workShiftService.createWorkShift(shiftData)
-        .pipe(
-          takeUntil(this.destroy$),
-          finalize(() => this.workShiftForm.reset())
-        )
-        .subscribe(response => {
+      .subscribe({
+        next: (response) => {
           if (response.success) {
-            console.log('Work shift created successfully!');
-            this.loadWorkShifts(); // Refresh list
-          } else {
-            console.error('Failed to create work shift:', response.errors);
+            this.departments = response.data || [];
+            this.dashboardStats.totalDepartments = response.totalCount || 0;
           }
-        });
+        },
+        error: (error) => {
+          console.error('Error loading departments:', error);
+        }
+      });
+
+    // Load work shifts
+    this.workShiftService.getWorkShifts(1, 20, undefined, new Date().toISOString().split('T')[0])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          if (response.success) {
+            this.workShifts = response.data || [];
+            this.dashboardStats.todayShifts = response.totalCount || 0;
+          }
+        },
+        error: (error) => {
+          console.error('Error loading work shifts:', error);
+        }
+      });
+
+    // Load attendance status if user is available
+    if (this.currentUser?.employeeCode) {
+      this.loadAttendanceStatus();
     }
   }
 
-  // Attendance Management
-  loadAttendanceStatus(): void {
+  private loadAttendanceStatus(): void {
+    if (!this.currentUser?.employeeCode) return;
+
     this.attendanceService.getCurrentStatus()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          this.attendanceStatus = response.data;
-        }
-      });
-  }
-
-  checkIn(): void {
-    const checkInData = {
-      checkInTime: new Date(),
-      notes: 'Check-in from dashboard'
-    };
-
-    this.attendanceService.checkIn(checkInData)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          console.log('Checked in successfully!');
-          this.loadAttendanceStatus(); // Refresh status
-        } else {
-          console.error('Failed to check in:', response.errors);
-        }
-      });
-  }
-
-  checkOut(): void {
-    const checkOutData = {
-      checkOutTime: new Date(),
-      notes: 'Check-out from dashboard'
-    };
-
-    this.attendanceService.checkOut(checkOutData)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          console.log('Checked out successfully!');
-          this.loadAttendanceStatus(); // Refresh status
-        } else {
-          console.error('Failed to check out:', response.errors);
-        }
-      });
-  }
-
-  // Image Management
-  onFileSelected(event: any, fileType: string): void {
-    const file = event.target.files[0];
-    if (file) {
-      this.uploadImage(file, fileType);
-    }
-  }
-
-  uploadImage(file: File, fileType: string): void {
-    this.imageService.uploadImage(file, fileType, 'Dashboard upload')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          console.log('Image uploaded successfully!', response.data);
-        } else {
-          console.error('Failed to upload image:', response.errors);
-        }
-      });
-  }
-
-  uploadEmployeePhoto(file: File): void {
-    if (!file) return;
-    
-    this.imageService.setMyPhoto(file)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          console.log('Employee photo uploaded successfully!');
-        } else {
-          console.error('Failed to upload employee photo:', response.errors);
-        }
-      });
-  }
-
-  // Payroll Management - Fixed method calls
-  createLeaveRequest(): void {
-    if (this.leaveRequestForm.valid) {
-      const leaveData = {
-        ...this.leaveRequestForm.value,
-        startDate: new Date(this.leaveRequestForm.value.startDate),
-        endDate: new Date(this.leaveRequestForm.value.endDate)
-      };
-      
-      this.payrollService.createLeaveRequest(leaveData)
-        .pipe(
-          takeUntil(this.destroy$),
-          finalize(() => this.leaveRequestForm.reset())
-        )
-        .subscribe(response => {
+      .subscribe({
+        next: (response: any) => {
           if (response.success) {
-            console.log('Leave request created successfully!');
-            this.loadDashboardStats(); // Refresh stats
-          } else {
-            console.error('Failed to create leave request:', response.errors);
+            this.attendanceStatus = response.data;
           }
-        });
-    }
-  }
-
-  // Dashboard Statistics - Fixed method calls
-  private loadDashboardStats(): void {
-    // Fixed: Use correct parameter signature for getMyLeaveRequests
-    this.payrollService.getMyLeaveRequests(1, 1, 'PENDING')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(response => {
-        if (response.success) {
-          this.dashboardStats.pendingLeaveRequests = response.totalCount;
+        },
+        error: (error: any) => {
+          console.error('Error loading attendance status:', error);
         }
       });
   }
 
-  // Utility Methods
+  // Authentication methods
   isAuthenticated(): boolean {
     return this.authService.isAuthenticated();
   }
 
   hasRole(role: string): boolean {
-    return this.authService.hasRole(role);
+    const userRoles = Object.values(UserRole);
+    const roleEnum = userRoles.find(r => r.toString() === role);
+    return roleEnum ? this.authService.hasRole(roleEnum) : false;
   }
 
   logout(): void {
     this.authService.logout()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        console.log('Logged out successfully');
+      .subscribe({
+        next: () => {
+          this.notificationService.showSuccess('Đăng xuất thành công');
+        },
+        error: (error) => {
+          console.error('Logout error:', error);
+          this.notificationService.showError('Có lỗi khi đăng xuất');
+        }
       });
   }
 
-  // Helper method to get employee photo URL
-  getEmployeePhotoUrl(employeeCode: string): string {
-    return this.imageService.getEmployeeAvatarUrl(employeeCode);
+  // Form submission methods
+  createEmployee(): void {
+    if (this.employeeForm.valid) {
+      const employeeData = this.employeeForm.value;
+      
+      this.employeeService.createEmployee(employeeData)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (response) => {
+            if (response.success) {
+              this.notificationService.showSuccess('Tạo nhân viên thành công');
+              this.employeeForm.reset();
+              this.loadDashboardData();
+            } else {
+              this.notificationService.showError(response.message || 'Có lỗi xảy ra');
+            }
+          },
+          error: (error) => {
+            console.error('Error creating employee:', error);
+            this.notificationService.showError('Lỗi tạo nhân viên');
+          }
+        });
+    }
   }
 
-  // Helper method to format file size
-  formatFileSize(bytes: number): string {
-    return this.imageService.formatFileSize(bytes);
+  createWorkShift(): void {
+    if (this.workShiftForm.valid) {
+      const shiftData = this.workShiftForm.value;
+      
+      this.workShiftService.createWorkShift(shiftData)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (response) => {
+            if (response.success) {
+              this.notificationService.showSuccess('Tạo ca làm việc thành công');
+              this.workShiftForm.reset();
+              this.loadDashboardData();
+            } else {
+              this.notificationService.showError(response.message || 'Có lỗi xảy ra');
+            }
+          },
+          error: (error) => {
+            console.error('Error creating work shift:', error);
+            this.notificationService.showError('Lỗi tạo ca làm việc');
+          }
+        });
+    }
   }
 
-  // Helper method to format time
-  formatTime(time: string): string {
-    return this.workShiftService.formatTime(time);
+  createLeaveRequest(): void {
+    if (this.leaveRequestForm.valid) {
+      const leaveData = this.leaveRequestForm.value;
+      
+      // Assuming we have a leave request service
+      console.log('Creating leave request:', leaveData);
+      this.notificationService.showInfo('Tính năng nghỉ phép sẽ được cập nhật');
+      this.leaveRequestForm.reset();
+    }
   }
 
-  // Helper method to calculate worked hours
-  calculateWorkedHours(checkIn: Date, checkOut: Date): number {
-    return this.attendanceService.calculateWorkedHours(checkIn, checkOut);
+  // Attendance methods
+  checkIn(): void {
+    if (!this.currentUser?.employeeCode) return;
+
+    const checkInRequest: CheckInRequest = {
+      checkInTime: new Date(),
+      notes: 'Dashboard check-in'
+    };
+
+    this.attendanceService.checkIn(checkInRequest)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: any) => {
+          if (response.success) {
+            this.notificationService.showSuccess('Check-in thành công');
+            this.loadAttendanceStatus();
+          } else {
+            this.notificationService.showError(response.message || 'Lỗi check-in');
+          }
+        },
+        error: (error: any) => {
+          console.error('Check-in error:', error);
+          this.notificationService.showError('Lỗi check-in');
+        }
+      });
+  }
+
+  checkOut(): void {
+    if (!this.currentUser?.employeeCode) return;
+
+    const checkOutRequest: CheckOutRequest = {
+      checkOutTime: new Date(),
+      notes: 'Dashboard check-out'
+    };
+
+    this.attendanceService.checkOut(checkOutRequest)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: any) => {
+          if (response.success) {
+            this.notificationService.showSuccess('Check-out thành công');
+            this.loadAttendanceStatus();
+          } else {
+            this.notificationService.showError(response.message || 'Lỗi check-out');
+          }
+        },
+        error: (error: any) => {
+          console.error('Check-out error:', error);
+          this.notificationService.showError('Lỗi check-out');
+        }
+      });
+  }
+
+  // Image handling methods - Type-safe versions
+  onImageError(event: Event): void {
+    const target = event.target as HTMLImageElement;
+    if (target) {
+      target.src = '/assets/images/default-avatar.png';
+    }
+  }
+
+  onEmployeePhotoChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    const files = target?.files;
+    if (files && files.length > 0) {
+      this.uploadEmployeePhoto(files[0]);
+    }
+  }
+
+  uploadEmployeePhoto(file: File): void {
+    if (!this.currentUser?.employeeCode || !file) return;
+
+    this.imageService.setEmployeePhoto(this.currentUser.employeeCode, file)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: any) => {
+          if (response.success) {
+            this.notificationService.showSuccess('Cập nhật ảnh thành công');
+          } else {
+            this.notificationService.showError(response.message || 'Lỗi upload ảnh');
+          }
+        },
+        error: (error: any) => {
+          console.error('Error uploading photo:', error);
+          this.notificationService.showError('Lỗi upload ảnh');
+        }
+      });
+  }
+
+  onFileSelected(event: Event, fileType: string): void {
+    const target = event.target as HTMLInputElement;
+    const files = target?.files;
+    if (files && files.length > 0) {
+      this.uploadFile(files[0], fileType);
+    }
+  }
+
+  private uploadFile(file: File, fileType: string): void {
+    this.imageService.uploadImage(file, fileType)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          if (response.success) {
+            this.notificationService.showSuccess('Upload file thành công');
+          } else {
+            this.notificationService.showError(response.message || 'Lỗi upload file');
+          }
+        },
+        error: (error) => {
+          console.error('Error uploading file:', error);
+          this.notificationService.showError('Lỗi upload file');
+        }
+      });
+  }
+
+  // Utility methods
+  getEmployeePhotoUrl(employeeCode: string | undefined): string {
+    if (!employeeCode) return '/assets/images/default-avatar.png';
+    return this.imageService.getEmployeePhoto(employeeCode);
+  }
+
+  formatTime(time: string | undefined): string {
+    if (!time) return '--:--';
+    return time;
   }
 }

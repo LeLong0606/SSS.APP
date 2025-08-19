@@ -13,7 +13,13 @@
     "lint": "ng lint",
     "e2e": "ng e2e",
     "serve:prod": "ng serve --configuration=production",
-    "generate-cert": "node generate-ssl-cert.js"
+    "generate-cert": "node generate-ssl-cert.js",
+    "clean": "node clean.js && npm install",
+    "clean:only": "node clean.js",
+    "clean:windows": "if exist node_modules rmdir /s /q node_modules && if exist package-lock.json del package-lock.json && npm install",
+    "clean:unix": "rm -rf node_modules package-lock.json && npm install",
+    "fix-deps": "npm install --legacy-peer-deps",
+    "postinstall": "npx ngcc --properties es2020 browser module main --first-only --create-ivy-entry-points"
   },
   "private": true,
   "dependencies": {
@@ -48,13 +54,13 @@
     "zone.js": "~0.14.10"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^20.1.6",
+    "@angular-devkit/build-angular": "^17.3.10",
     "@angular-eslint/builder": "^17.5.2",
     "@angular-eslint/eslint-plugin": "^17.5.2",
     "@angular-eslint/eslint-plugin-template": "^17.5.2",
-    "@angular-eslint/schematics": "^20.1.1",
+    "@angular-eslint/schematics": "^17.5.2",
     "@angular-eslint/template-parser": "^17.5.2",
-    "@angular/cli": "^20.1.6",
+    "@angular/cli": "^17.3.10",
     "@angular/compiler-cli": "^17.3.12",
     "@types/aos": "^3.0.7",
     "@types/chart.js": "^2.9.41",
@@ -70,6 +76,11 @@
     "karma-coverage": "~2.2.1",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "rimraf": "^5.0.5",
     "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=18.13.0",
+    "npm": ">=8.19.0"
   }
 }
