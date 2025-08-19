@@ -57,6 +57,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workShiftForm!: FormGroup;
   leaveRequestForm!: FormGroup;
 
+  // Image handling
+  private imageErrorsMap = new Map<string, boolean>();
+  private readonly defaultAvatarUrl = 'assets/images/default-avatar.svg';
+
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
@@ -320,11 +324,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Image handling methods - Type-safe versions
+  // Image handling methods - Improved to avoid infinite reload
   onImageError(event: Event): void {
     const target = event.target as HTMLImageElement;
     if (target) {
-      target.src = '/assets/images/default-avatar.png';
+      const currentSrc = target.src;
+      
+      // If already showing default avatar, don't change anything to avoid infinite loop
+      if (currentSrc.includes(this.defaultAvatarUrl)) {
+        console.warn('Default avatar image also failed to load');
+        return;
+      }
+
+      // Mark this URL as failed and switch to default
+      this.imageErrorsMap.set(currentSrc, true);
+      target.src = this.defaultAvatarUrl;
     }
   }
 
@@ -345,6 +359,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         next: (response: any) => {
           if (response.success) {
             this.notificationService.showSuccess('Cập nhật ảnh thành công');
+            // Clear the error cache for this user to allow reloading
+            if (this.currentUser?.employeeCode) {
+              const photoUrl = this.imageService.getEmployeePhoto(this.currentUser.employeeCode);
+              this.imageErrorsMap.delete(photoUrl);
+            }
           } else {
             this.notificationService.showError(response.message || 'Lỗi upload ảnh');
           }
@@ -384,8 +403,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Utility methods
   getEmployeePhotoUrl(employeeCode: string | undefined): string {
-    if (!employeeCode) return '/assets/images/default-avatar.png';
-    return this.imageService.getEmployeePhoto(employeeCode);
+    if (!employeeCode) return this.defaultAvatarUrl;
+    
+    const photoUrl = this.imageService.getEmployeePhoto(employeeCode);
+    
+    // If this URL has failed before, return default avatar immediately
+    if (this.imageErrorsMap.has(photoUrl)) {
+      return this.defaultAvatarUrl;
+    }
+    
+    return photoUrl;
   }
 
   formatTime(time: string | undefined): string {
