@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject, takeUntil } from 'rxjs';
-// ✅ FIX: Use direct import path
-import { NotificationService, ToastNotification, NotificationAction } from '../../core/services/notification.service';
+// ✅ FIX: Correct import path
+import { NotificationService, ToastNotification, NotificationAction } from '../../../core/services/notification.service';
 
 @Component({
   selector: 'app-toast-container',

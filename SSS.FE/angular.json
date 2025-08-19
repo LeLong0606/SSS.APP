@@ -106,7 +106,7 @@
           "defaultConfiguration": "development",
           "options": {
             "port": 50503,
-            "host": "127.0.0.1",
+            "host": "localhost",
             "proxyConfig": "proxy.conf.json"
           }
         },

@@ -3,14 +3,17 @@
   "version": "2.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --host=127.0.0.1 --port=50503",
+    "start": "ng serve",
+    "start:https": "ng serve --ssl --host=localhost --port=50503",
+    "start:ip": "ng serve --host=127.0.0.1 --port=50503",
     "build": "ng build",
     "build:prod": "ng build --configuration=production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "ng lint",
     "e2e": "ng e2e",
-    "serve:prod": "ng serve --configuration=production"
+    "serve:prod": "ng serve --configuration=production",
+    "generate-cert": "node generate-ssl-cert.js"
   },
   "private": true,
   "dependencies": {
