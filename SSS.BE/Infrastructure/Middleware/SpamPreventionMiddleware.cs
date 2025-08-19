@@ -8,13 +8,14 @@ using System.Text.Json;
 namespace SSS.BE.Infrastructure.Middleware;
 
 /// <summary>
-/// Advanced spam prevention middleware with database logging and pattern recognition
+/// Advanced spam prevention middleware with database logging and pattern recognition (Updated for less sensitivity)
 /// </summary>
 public class SpamPreventionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<SpamPreventionMiddleware> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConfiguration _configuration;
 
     // In-memory cache for quick lookups (with expiration)
     private static readonly Dictionary<string, SpamTracker> _ipTrackers = new();
@@ -23,11 +24,12 @@ public class SpamPreventionMiddleware
     private static DateTime _lastCleanup = DateTime.UtcNow;
 
     public SpamPreventionMiddleware(RequestDelegate next, ILogger<SpamPreventionMiddleware> logger, 
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider, IConfiguration configuration)
     {
         _next = next;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _configuration = configuration;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -52,32 +54,39 @@ public class SpamPreventionMiddleware
 
         try
         {
-            // 1. Quick in-memory spam check
-            if (IsQuickSpamDetected(ipAddress, userId, endpoint))
+            // ?? IMPROVEMENT: Less aggressive quick spam check
+            if (IsQuickSpamDetected(context, ipAddress, userId, endpoint))
             {
                 await HandleSpamDetected(context, requestId, ipAddress, userId, "Quick spam detection");
                 return;
             }
 
-            // 2. Read request body for hash calculation
-            var requestBody = await ReadRequestBodyAsync(context.Request);
-            
-            // 3. Advanced spam detection using database
-            using var scope = _serviceProvider.CreateScope();
-            var antiSpamService = scope.ServiceProvider.GetRequiredService<IAntiSpamService>();
-            
-            var isSpam = await antiSpamService.IsSpamRequestAsync(ipAddress, userId, endpoint, requestBody);
-            if (isSpam)
+            // ?? IMPROVEMENT: Skip database spam detection for GET requests from authenticated users
+            if (!(httpMethod == "GET" && context.User?.Identity?.IsAuthenticated == true))
             {
-                await HandleSpamDetected(context, requestId, ipAddress, userId, "Database spam detection");
+                // 2. Read request body for hash calculation (only for non-GET requests)
+                var requestBody = httpMethod != "GET" ? await ReadRequestBodyAsync(context.Request) : string.Empty;
                 
-                // Log in database
-                await antiSpamService.LogRequestAsync(ipAddress, userId, endpoint, httpMethod, 
-                    requestBody, 429, 0, userAgent);
-                return;
+                // 3. Advanced spam detection using database (less frequent checks)
+                if (ShouldCheckDatabaseSpam(context))
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var antiSpamService = scope.ServiceProvider.GetRequiredService<IAntiSpamService>();
+                    
+                    var isSpam = await antiSpamService.IsSpamRequestAsync(ipAddress, userId, endpoint, requestBody);
+                    if (isSpam)
+                    {
+                        await HandleSpamDetected(context, requestId, ipAddress, userId, "Database spam detection");
+                        
+                        // Log in database
+                        await antiSpamService.LogRequestAsync(ipAddress, userId, endpoint, httpMethod, 
+                            requestBody, 429, 0, userAgent);
+                        return;
+                    }
+                }
             }
 
-            // 4. Update in-memory trackers
+            // 4. Update in-memory trackers (less frequently)
             UpdateSpamTrackers(ipAddress, userId);
 
             // 5. Process the request
@@ -92,26 +101,29 @@ public class SpamPreventionMiddleware
         }
         finally
         {
-            // Log request in database (async, fire-and-forget)
-            var responseTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
-            _ = Task.Run(async () =>
+            // ?? IMPROVEMENT: Log only important requests to reduce database load
+            if (ShouldLogRequest(context, statusCode))
             {
-                try
+                var responseTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+                _ = Task.Run(async () =>
                 {
-                    using var scope = _serviceProvider.CreateScope();
-                    var antiSpamService = scope.ServiceProvider.GetRequiredService<IAntiSpamService>();
-                    var requestBody = await ReadRequestBodyAsync(context.Request);
-                    
-                    await antiSpamService.LogRequestAsync(ipAddress, userId, endpoint, httpMethod, 
-                        requestBody, statusCode, responseTime, userAgent);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "[{RequestId}] Error logging request in spam prevention", requestId);
-                }
-            });
+                    try
+                    {
+                        using var scope = _serviceProvider.CreateScope();
+                        var antiSpamService = scope.ServiceProvider.GetRequiredService<IAntiSpamService>();
+                        var requestBody = httpMethod != "GET" ? await ReadRequestBodyAsync(context.Request) : string.Empty;
+                        
+                        await antiSpamService.LogRequestAsync(ipAddress, userId, endpoint, httpMethod, 
+                            requestBody, statusCode, responseTime, userAgent);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[{RequestId}] Error logging request in spam prevention", requestId);
+                    }
+                });
+            }
 
-            // Cleanup old trackers periodically
+            // Cleanup old trackers less frequently
             CleanupOldTrackers();
         }
     }
@@ -144,30 +156,47 @@ public class SpamPreventionMiddleware
             "/swagger",
             "/api-docs",
             "/.well-known",
-            "/favicon.ico"
+            "/favicon.ico",
+            "/css/",
+            "/js/",
+            "/images/",
+            "/assets/"
         };
 
         return pathsToSkip.Any(skip => path.StartsWith(skip, StringComparison.OrdinalIgnoreCase));
     }
 
-    private bool IsQuickSpamDetected(string ipAddress, string? userId, string endpoint)
+    private bool IsQuickSpamDetected(HttpContext context, string ipAddress, string? userId, string endpoint)
     {
+        // ?? IMPROVEMENT: Get configurable limits
+        var config = _configuration.GetSection("Security:AntiSpam");
+        var ipLimit = config.GetValue<int>("MaxRequestsPerMinutePerIP", 400);
+        var userLimit = config.GetValue<int>("MaxRequestsPerMinutePerUser", 600);
+        var windowMinutes = config.GetValue<int>("QuickDetectionWindowMinutes", 2);
+
         lock (_lockObject)
         {
             var now = DateTime.UtcNow;
+            var timeWindow = TimeSpan.FromMinutes(windowMinutes);
 
-            // Check IP-based spam
+            // ?? IMPROVEMENT: Much higher thresholds and longer time windows
+            // Check IP-based spam with higher threshold
             if (_ipTrackers.TryGetValue(ipAddress, out var ipTracker))
             {
                 // Remove old entries
-                ipTracker.Requests.RemoveAll(r => now - r > TimeSpan.FromMinutes(1));
+                ipTracker.Requests.RemoveAll(r => now - r > timeWindow);
                 
-                // Check if too many requests in last minute
-                if (ipTracker.Requests.Count >= 120) // 120 requests per minute = 2 per second
+                // Check if too many requests in the time window
+                if (ipTracker.Requests.Count >= ipLimit)
                 {
-                    _logger.LogWarning("QUICK SPAM DETECTED: IP {IpAddress} made {Count} requests in last minute",
-                        ipAddress, ipTracker.Requests.Count);
-                    return true;
+                    // ?? IMPROVEMENT: Only treat as spam if it's really excessive
+                    var recentRequests = ipTracker.Requests.Count(r => now - r < TimeSpan.FromSeconds(10));
+                    if (recentRequests >= 50) // 50 requests in 10 seconds = definitely spam
+                    {
+                        _logger.LogWarning("SPAM DETECTED: IP {IpAddress} made {Count} requests in last {Window} minutes ({Recent} in last 10 seconds)",
+                            ipAddress, ipTracker.Requests.Count, windowMinutes, recentRequests);
+                        return true;
+                    }
                 }
 
                 ipTracker.Requests.Add(now);
@@ -177,18 +206,23 @@ public class SpamPreventionMiddleware
                 _ipTrackers[ipAddress] = new SpamTracker { Requests = new List<DateTime> { now } };
             }
 
-            // Check user-based spam if authenticated
+            // Check user-based spam if authenticated (even more lenient)
             if (!string.IsNullOrEmpty(userId))
             {
                 if (_userTrackers.TryGetValue(userId, out var userTracker))
                 {
-                    userTracker.Requests.RemoveAll(r => now - r > TimeSpan.FromMinutes(1));
+                    userTracker.Requests.RemoveAll(r => now - r > timeWindow);
                     
-                    if (userTracker.Requests.Count >= 200) // 200 requests per minute for authenticated users
+                    // ?? IMPROVEMENT: Very high threshold for authenticated users
+                    if (userTracker.Requests.Count >= userLimit)
                     {
-                        _logger.LogWarning("QUICK SPAM DETECTED: User {UserId} made {Count} requests in last minute",
-                            userId, userTracker.Requests.Count);
-                        return true;
+                        var recentRequests = userTracker.Requests.Count(r => now - r < TimeSpan.FromSeconds(10));
+                        if (recentRequests >= 100) // 100 requests in 10 seconds for authenticated users
+                        {
+                            _logger.LogWarning("SPAM DETECTED: User {UserId} made {Count} requests in last {Window} minutes ({Recent} in last 10 seconds)",
+                                userId, userTracker.Requests.Count, windowMinutes, recentRequests);
+                            return true;
+                        }
                     }
 
                     userTracker.Requests.Add(now);
@@ -201,6 +235,26 @@ public class SpamPreventionMiddleware
 
             return false;
         }
+    }
+
+    private bool ShouldCheckDatabaseSpam(HttpContext context)
+    {
+        // ?? IMPROVEMENT: Skip database checks for authenticated GET requests
+        if (context.Request.Method == "GET" && context.User?.Identity?.IsAuthenticated == true)
+        {
+            return false;
+        }
+
+        // ?? IMPROVEMENT: Only check every 5th request to reduce database load
+        return DateTime.UtcNow.Millisecond % 5 == 0;
+    }
+
+    private bool ShouldLogRequest(HttpContext context, int statusCode)
+    {
+        // ?? IMPROVEMENT: Only log specific types of requests
+        return statusCode >= 400 || // All error responses
+               context.Request.Method != "GET" || // All non-GET requests
+               DateTime.UtcNow.Second % 30 == 0; // Every 30th second for GET requests
     }
 
     private void UpdateSpamTrackers(string ipAddress, string? userId)
@@ -232,14 +286,14 @@ public class SpamPreventionMiddleware
     {
         var now = DateTime.UtcNow;
         
-        // Clean up every 5 minutes
-        if (now - _lastCleanup < TimeSpan.FromMinutes(5))
+        // ?? IMPROVEMENT: Clean up less frequently (every 10 minutes)
+        if (now - _lastCleanup < TimeSpan.FromMinutes(10))
             return;
 
         lock (_lockObject)
         {
             _lastCleanup = now;
-            var cutoff = now.AddMinutes(-10); // Remove trackers older than 10 minutes
+            var cutoff = now.AddMinutes(-30); // Remove trackers older than 30 minutes
 
             var oldIpKeys = _ipTrackers
                 .Where(kvp => kvp.Value.LastSeen < cutoff)
@@ -299,8 +353,11 @@ public class SpamPreventionMiddleware
     private async Task HandleSpamDetected(HttpContext context, string requestId, string ipAddress, 
         string? userId, string reason)
     {
-        _logger.LogWarning("[{RequestId}] SPAM DETECTED: {Reason} from IP {IpAddress}, User {UserId}",
-            requestId, reason, ipAddress, userId ?? "Anonymous");
+        // ?? IMPROVEMENT: Shorter block duration
+        var blockDuration = _configuration.GetSection("Security:AntiSpam").GetValue<int>("BlockDurationMinutes", 5);
+        
+        _logger.LogWarning("[{RequestId}] SPAM DETECTED: {Reason} from IP {IpAddress}, User {UserId} - Blocked for {Duration} minutes",
+            requestId, reason, ipAddress, userId ?? "Anonymous", blockDuration);
 
         var response = context.Response;
         response.StatusCode = (int)HttpStatusCode.TooManyRequests;
@@ -309,17 +366,17 @@ public class SpamPreventionMiddleware
         // Add security headers
         response.Headers["X-Rate-Limit-Exceeded"] = "true";
         response.Headers["X-Spam-Detected"] = "true";
-        response.Headers["Retry-After"] = "300"; // 5 minutes
+        response.Headers["Retry-After"] = (blockDuration * 60).ToString(); // Convert minutes to seconds
 
         var errorResponse = new ApiResponse<object>
         {
             Success = false,
-            Message = "Too many requests - spam protection activated",
+            Message = "Too many requests - please slow down",
             Errors = new List<string>
             {
-                "Your request has been blocked due to suspicious activity",
-                "Please wait 5 minutes before trying again",
-                "If you believe this is an error, contact support",
+                "Your request frequency is too high for our security systems",
+                $"Please wait {blockDuration} minutes before trying again",
+                "If you need to make many requests, consider using our bulk APIs",
                 $"Request ID: {requestId}"
             }
         };

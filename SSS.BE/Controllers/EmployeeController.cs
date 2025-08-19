@@ -75,6 +75,19 @@ public class EmployeeController : ControllerBase
     }
 
     /// <summary>
+    /// ?? Get employees without department assignment (All authenticated users can view)
+    /// </summary>
+    [HttpGet("unassigned")]
+    public async Task<ActionResult<PagedResponse<EmployeeDto>>> GetUnassignedEmployees(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null)
+    {
+        var result = await _employeeService.GetUnassignedEmployeesAsync(pageNumber, pageSize, search);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Create a new employee (Administrator, Director, TeamLeader can create)
     /// </summary>
     [HttpPost]
@@ -96,6 +109,131 @@ public class EmployeeController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            return BadRequest(new ApiResponse<EmployeeDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
+            });
+        }
+    }
+
+    /// <summary>
+    /// ?? Assign employee to department after creation (Administrator, Director, TeamLeader can assign)
+    /// </summary>
+    [HttpPost("{employeeCode}/assign-department")]
+    [Authorize(Roles = "Administrator,Director,TeamLeader")]
+    public async Task<ActionResult<ApiResponse<EmployeeDto>>> AssignEmployeeToDepartment(
+        string employeeCode, 
+        [FromBody] AssignEmployeeToDepartmentRequest request)
+    {
+        try
+        {
+            var result = await _employeeService.AssignEmployeeToDepartmentAsync(employeeCode, request);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            _logger.LogInformation("Employee {EmployeeCode} assigned to department {DepartmentId} as {Role}", 
+                employeeCode, request.DepartmentId, request.SetAsTeamLeader ? "Team Leader" : "Member");
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+            {
+                return NotFound(new ApiResponse<EmployeeDto>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
+            return BadRequest(new ApiResponse<EmployeeDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
+            });
+        }
+    }
+
+    /// <summary>
+    /// ?? Update employee's department assignment (Administrator, Director, TeamLeader can update)
+    /// </summary>
+    [HttpPut("{employeeCode}/department")]
+    [Authorize(Roles = "Administrator,Director,TeamLeader")]
+    public async Task<ActionResult<ApiResponse<EmployeeDto>>> UpdateEmployeeDepartment(
+        string employeeCode, 
+        [FromBody] UpdateEmployeeDepartmentRequest request)
+    {
+        try
+        {
+            var result = await _employeeService.UpdateEmployeeDepartmentAsync(employeeCode, request);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            _logger.LogInformation("Employee {EmployeeCode} department assignment updated", employeeCode);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+            {
+                return NotFound(new ApiResponse<EmployeeDto>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
+            return BadRequest(new ApiResponse<EmployeeDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
+            });
+        }
+    }
+
+    /// <summary>
+    /// ?? Remove employee from department (Administrator, Director, TeamLeader can remove)
+    /// </summary>
+    [HttpDelete("{employeeCode}/remove-department")]
+    [Authorize(Roles = "Administrator,Director,TeamLeader")]
+    public async Task<ActionResult<ApiResponse<EmployeeDto>>> RemoveEmployeeFromDepartment(string employeeCode)
+    {
+        try
+        {
+            var result = await _employeeService.RemoveEmployeeFromDepartmentAsync(employeeCode);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            _logger.LogInformation("Employee {EmployeeCode} removed from department", employeeCode);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+            {
+                return NotFound(new ApiResponse<EmployeeDto>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
             return BadRequest(new ApiResponse<EmployeeDto>
             {
                 Success = false,

@@ -160,10 +160,16 @@ builder.Services.AddHostedService<DatabaseMaintenanceService>();
 
 var app = builder.Build();
 
-// ===== CORS must be early in pipeline - BEFORE most other middleware =====
-app.UseCors("AllowFrontend"); // Move CORS to the very beginning
+// ===== IMPORTANT: Enable Swagger BEFORE other middleware =====
+app.UseSwaggerDefault();
 
-// ===== Use Custom Middleware Pipeline (AFTER CORS) =====
+// ===== CORS must be early in pipeline - AFTER Swagger =====
+app.UseCors("AllowFrontend");
+
+// ===== ADD STATIC FILES SUPPORT FOR SWAGGER CUSTOM CSS/JS =====
+app.UseStaticFiles(); // Enable serving static files from wwwroot
+
+// ===== Use Custom Middleware Pipeline (AFTER CORS & Static Files) =====
 app.UseCustomMiddleware(builder.Configuration);
 
 // ===== Add Spam Prevention Middleware =====
@@ -172,23 +178,55 @@ app.UseMiddleware<SSS.BE.Infrastructure.Middleware.SpamPreventionMiddleware>();
 // ===== Use English Configuration =====
 app.UseEnglish();
 
-// Seed roles and admin user
+// ===== ?? CODE-FIRST DATABASE MIGRATION & AUTO SEEDING =====
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    
     try
     {
-        await DataSeeder.SeedAsync(services);
+        logger.LogInformation("?? Starting SSS.BE with Code-First Database Migration & Auto Seeding...");
+        
+        // Get required services
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+        
+        // ===== 1. DATABASE MIGRATION =====
+        logger.LogInformation("?? Ensuring database is created and migrated...");
+        await context.Database.MigrateAsync(); // This will create database and run migrations
+        logger.LogInformation("? Database migration completed successfully!");
+        
+        // ===== 2. COMPREHENSIVE DATA SEEDING =====
+        logger.LogInformation("?? Starting comprehensive data seeding...");
+        await DataSeeder.SeedAsync(context, userManager, roleManager, logger);
+        logger.LogInformation("? Data seeding completed successfully!");
+        
+        // ===== 3. PRINT SUCCESS MESSAGE =====
+        logger.LogInformation("?? SSS.BE started successfully with full attendance management system!");
+        logger.LogInformation("?? Default Admin Account: EMP001@sss.company.com / Password@123");
+        logger.LogInformation("?? Features Available:");
+        logger.LogInformation("   ? Employee Management");
+        logger.LogInformation("   ? Department Management");
+        logger.LogInformation("   ? Work Shift Management");
+        logger.LogInformation("   ? Attendance Management (NEW)");
+        logger.LogInformation("   ? Image Management (NEW)");
+        logger.LogInformation("   ? Payroll Periods (NEW)");
+        logger.LogInformation("   ? Leave Requests (NEW)");
+        logger.LogInformation("   ? Overtime Management (NEW)");
+        logger.LogInformation("   ? Excel Export for TCHC (NEW)");
     }
     catch (Exception ex)
     {
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while seeding the database");
+        logger.LogError(ex, "? An error occurred during database migration or data seeding");
+        logger.LogError("??  The application will continue to start, but some features may not work correctly");
+        logger.LogError("?? Please check your database connection and ensure SQL Server is running");
+        
+        // Don't stop the application, just log the error
+        // This allows the app to start even if database is temporarily unavailable
     }
 }
-
-// ===== Default Swagger =====
-app.UseSwaggerDefault();
 
 app.UseHttpsRedirection();
 
@@ -209,7 +247,7 @@ app.MapGet("/health", async (IServiceProvider services) =>
         Status = healthReport.IsHealthy ? "Healthy" : "Degraded",
         Timestamp = DateTime.UtcNow.FormatDateTime(),
         Culture = System.Globalization.CultureInfo.CurrentCulture.Name,
-        Version = "2.0.0",
+        Version = "2.1.0 - Attendance Management",
         Environment = app.Environment.EnvironmentName,
         MemoryUsage = $"{GC.GetTotalMemory(false) / 1024 / 1024}MB",
         MachineName = Environment.MachineName,
@@ -225,6 +263,17 @@ app.MapGet("/health", async (IServiceProvider services) =>
             healthReport.RecentSpamCount,
             healthReport.RecentDuplicateAttempts,
             healthReport.AverageResponseTime
+        },
+        Features = new
+        {
+            AttendanceManagement = true,
+            ImageManagement = true,
+            PayrollPeriods = true,
+            LeaveRequests = true,
+            OvertimeManagement = true,
+            ExcelExport = true,
+            SelfAttendance = true,
+            FaceRecognition = false // Future feature
         }
     };
 }).WithTags("Health");
@@ -247,10 +296,17 @@ app.MapGet("/metrics", () => new
     },
     Application = new
     {
-        Version = "2.0.0",
+        Version = "2.1.0 - Attendance Management",
         Environment = app.Environment.EnvironmentName,
         StartTime = System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime(),
-        Uptime = DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()
+        Uptime = DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime(),
+        Features = new
+        {
+            AttendanceManagement = true,
+            ImageManagement = true,
+            PayrollExport = true,
+            SelfAttendance = true
+        }
     }
 }).WithTags("Monitoring")
   .RequireAuthorization("Administrator"); // Only administrators can access metrics
@@ -273,6 +329,95 @@ app.MapPost("/admin/optimize-database", async (IDatabaseOptimizationService dbSe
     return Results.Ok(new { Message = "Database optimization completed", Timestamp = DateTime.UtcNow });
 }).WithTags("Admin")
   .RequireAuthorization("Administrator");
+
+// ===== ?? NEW: Attendance System Status Endpoint =====
+app.MapGet("/attendance-system/status", async (ApplicationDbContext context) =>
+{
+    try
+    {
+        var stats = new
+        {
+            ShiftTemplates = await context.ShiftTemplates.CountAsync(st => st.IsActive),
+            ActiveShiftAssignments = await context.ShiftAssignments.CountAsync(sa => sa.IsActive),
+            TodayAttendanceEvents = await context.AttendanceEvents
+                .CountAsync(ae => ae.EventDateTime.Date == DateTime.Today),
+            OpenPayrollPeriods = await context.PayrollPeriods.CountAsync(pp => pp.Status == "OPEN"),
+            PendingLeaveRequests = await context.LeaveRequests.CountAsync(lr => lr.ApprovalStatus == "PENDING"),
+            TotalImageFiles = await context.ImageFiles.CountAsync(img => img.IsActive),
+            EmployeePhotos = await context.EmployeePhotos.CountAsync(ep => ep.IsActive),
+            AttendancePhotosToday = await context.AttendancePhotos
+                .CountAsync(ap => ap.TakenAt.Date == DateTime.Today),
+            SystemReady = true,
+            LastSeeded = DateTime.UtcNow,
+            Version = "2.1.0"
+        };
+
+        return Results.Ok(stats);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting attendance system status: {ex.Message}");
+    }
+}).WithTags("Attendance")
+  .RequireAuthorization();
+
+// ===== ?? DEBUG: Simple Test Endpoint =====
+app.MapGet("/test", () => new
+{
+    Message = "API is working!",
+    Timestamp = DateTime.UtcNow,
+    Version = "2.1.0"
+}).WithTags("Test")
+  .AllowAnonymous(); // Allow anonymous access for testing
+
+// ===== ?? DEBUG: Database Data Check Endpoint =====  
+app.MapGet("/debug/database-check", async (ApplicationDbContext context) =>
+{
+    try
+    {
+        var dbStats = new
+        {
+            // Existing tables
+            Departments = await context.Departments.CountAsync(),
+            Employees = await context.Employees.CountAsync(),
+            WorkLocations = await context.WorkLocations.CountAsync(),
+            WorkShifts = await context.WorkShifts.CountAsync(),
+            AspNetUsers = await context.Users.CountAsync(),
+            AspNetRoles = await context.Roles.CountAsync(),
+            
+            // New attendance tables
+            ShiftTemplates = await context.ShiftTemplates.CountAsync(),
+            ShiftAssignments = await context.ShiftAssignments.CountAsync(),
+            ShiftCalendars = await context.ShiftCalendars.CountAsync(),
+            AttendanceEvents = await context.AttendanceEvents.CountAsync(),
+            AttendanceDaily = await context.AttendanceDaily.CountAsync(),
+            LeaveRequests = await context.LeaveRequests.CountAsync(),
+            OvertimeRequests = await context.OvertimeRequests.CountAsync(),
+            Holidays = await context.Holidays.CountAsync(),
+            PayrollPeriods = await context.PayrollPeriods.CountAsync(),
+            PayrollSummaries = await context.PayrollSummaries.CountAsync(),
+            
+            // Image management tables
+            ImageFiles = await context.ImageFiles.CountAsync(),
+            EmployeePhotos = await context.EmployeePhotos.CountAsync(),
+            AttendancePhotos = await context.AttendancePhotos.CountAsync(),
+            LeaveRequestAttachments = await context.LeaveRequestAttachments.CountAsync(),
+            
+            DatabaseConnection = context.Database.CanConnect() ? "? Connected" : "? Not Connected",
+            LastMigration = context.Database.GetAppliedMigrations().LastOrDefault(),
+            PendingMigrations = context.Database.GetPendingMigrations().ToList(),
+            DatabaseProvider = context.Database.ProviderName,
+            Timestamp = DateTime.UtcNow
+        };
+
+        return Results.Ok(dbStats);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Database check failed: {ex.Message}");
+    }
+}).WithTags("Debug")
+  .AllowAnonymous(); // Allow anonymous access for debugging
 
 app.Run();
 
@@ -300,7 +445,7 @@ public class DatabaseMaintenanceService : BackgroundService
                 var dbService = scope.ServiceProvider.GetRequiredService<IDatabaseOptimizationService>();
                 var antiSpamService = scope.ServiceProvider.GetRequiredService<IAntiSpamService>();
 
-                _logger.LogInformation("Starting scheduled database maintenance...");
+                _logger.LogInformation("?? Starting scheduled database maintenance...");
 
                 // Cleanup old logs
                 await antiSpamService.CleanupOldLogsAsync();
@@ -311,13 +456,14 @@ public class DatabaseMaintenanceService : BackgroundService
                 {
                     await dbService.OptimizeIndexesAsync();
                     await dbService.AnalyzeTableStatisticsAsync();
+                    _logger.LogInformation("???  Database indexes optimized");
                 }
 
-                _logger.LogInformation("Scheduled database maintenance completed");
+                _logger.LogInformation("? Scheduled database maintenance completed");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during scheduled database maintenance");
+                _logger.LogError(ex, "? Error during scheduled database maintenance");
             }
         }
     }

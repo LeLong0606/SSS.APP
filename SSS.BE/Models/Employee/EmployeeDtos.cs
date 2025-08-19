@@ -59,6 +59,36 @@ public class UpdateEmployeeRequest
     public bool IsActive { get; set; } = true;
 }
 
+// ?? NEW: DTO for assigning employee to department after creation
+public class AssignEmployeeToDepartmentRequest
+{
+    [Required(ErrorMessage = "Department ID is required")]
+    public int DepartmentId { get; set; }
+    
+    public bool SetAsTeamLeader { get; set; } = false;
+}
+
+// ?? NEW: DTO for updating employee's department assignment
+public class UpdateEmployeeDepartmentRequest
+{
+    public int? DepartmentId { get; set; } // Null to unassign from department
+    
+    public bool IsTeamLeader { get; set; } = false;
+}
+
+// ?? NEW: DTO for bulk department assignment
+public class BulkAssignToDepartmentRequest
+{
+    [Required(ErrorMessage = "Department ID is required")]
+    public int DepartmentId { get; set; }
+    
+    [Required(ErrorMessage = "Employee codes are required")]
+    [MinLength(1, ErrorMessage = "At least one employee code is required")]
+    public List<string> EmployeeCodes { get; set; } = new();
+    
+    public string? TeamLeaderEmployeeCode { get; set; } // Optional: set one as team leader
+}
+
 public class EmployeeDto
 {
     public int Id { get; set; }
@@ -113,6 +143,23 @@ public class UpdateDepartmentRequest
     public bool IsActive { get; set; } = true;
 }
 
+// ?? NEW: DTO for assigning team leader to department after creation
+public class AssignTeamLeaderRequest
+{
+    [Required(ErrorMessage = "Employee code is required")]
+    public string EmployeeCode { get; set; } = string.Empty;
+    
+    public bool TransferEmployeeToDepartment { get; set; } = true; // Auto-transfer employee to this department
+}
+
+// ?? NEW: DTO for managing multiple employees in department
+public class ManageDepartmentEmployeesRequest
+{
+    public List<string> AddEmployees { get; set; } = new(); // Employee codes to add
+    public List<string> RemoveEmployees { get; set; } = new(); // Employee codes to remove
+    public string? NewTeamLeaderCode { get; set; } // Change team leader
+}
+
 public class DepartmentDto
 {
     public int Id { get; set; }
@@ -132,6 +179,25 @@ public class DepartmentDto
 
     // Employees list (optional, for detailed view)
     public List<EmployeeDto>? Employees { get; set; }
+}
+
+// ?? NEW: DTO for department assignment result
+public class DepartmentAssignmentResult
+{
+    public int DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public List<EmployeeAssignmentResult> EmployeeResults { get; set; } = new();
+    public string? NewTeamLeaderCode { get; set; }
+    public string? PreviousTeamLeaderCode { get; set; }
+}
+
+public class EmployeeAssignmentResult
+{
+    public string EmployeeCode { get; set; } = string.Empty;
+    public string EmployeeName { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty; // "Added", "Removed", "SetAsTeamLeader", etc.
 }
 
 // Common response wrapper

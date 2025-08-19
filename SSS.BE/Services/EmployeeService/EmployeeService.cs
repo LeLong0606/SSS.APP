@@ -15,6 +15,12 @@ public interface IEmployeeService
     Task<ApiResponse<EmployeeDto>> UpdateEmployeeAsync(int id, UpdateEmployeeRequest request);
     Task<ApiResponse<object>> DeleteEmployeeAsync(int id);
     Task<ApiResponse<object>> ToggleEmployeeStatusAsync(int id, bool isActive);
+    
+    // ?? NEW: Flexible employee management methods
+    Task<PagedResponse<EmployeeDto>> GetUnassignedEmployeesAsync(int pageNumber, int pageSize, string? search);
+    Task<ApiResponse<EmployeeDto>> AssignEmployeeToDepartmentAsync(string employeeCode, AssignEmployeeToDepartmentRequest request);
+    Task<ApiResponse<EmployeeDto>> UpdateEmployeeDepartmentAsync(string employeeCode, UpdateEmployeeDepartmentRequest request);
+    Task<ApiResponse<EmployeeDto>> RemoveEmployeeFromDepartmentAsync(string employeeCode);
 }
 
 public class EmployeeService : BaseService, IEmployeeService
@@ -145,6 +151,193 @@ public class EmployeeService : BaseService, IEmployeeService
 
             return employee;
         }, "Get employee by code");
+    }
+
+    // ?? NEW: Get employees without department assignment
+    public async Task<PagedResponse<EmployeeDto>> GetUnassignedEmployeesAsync(int pageNumber, int pageSize, string? search)
+    {
+        return await HandlePagedOperationAsync(async () =>
+        {
+            var query = _context.Employees
+                .Where(e => e.IsActive && e.DepartmentId == null)
+                .AsQueryable();
+
+            // Apply search filter
+            if (!string.IsNullOrEmpty(search))
+            {
+                query = query.Where(e => e.FullName.Contains(search) || 
+                                        e.EmployeeCode.Contains(search) ||
+                                        (e.Position != null && e.Position.Contains(search)));
+            }
+
+            var totalCount = await query.CountAsync();
+            
+            var employees = await query
+                .OrderBy(e => e.EmployeeCode)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(e => new EmployeeDto
+                {
+                    Id = e.Id,
+                    EmployeeCode = e.EmployeeCode,
+                    FullName = e.FullName,
+                    Position = e.Position,
+                    PhoneNumber = e.PhoneNumber,
+                    Address = e.Address,
+                    HireDate = e.HireDate,
+                    Salary = e.Salary,
+                    IsActive = e.IsActive,
+                    IsTeamLeader = e.IsTeamLeader,
+                    CreatedAt = e.CreatedAt,
+                    UpdatedAt = e.UpdatedAt,
+                    DepartmentId = null,
+                    DepartmentName = null,
+                    DepartmentCode = null
+                })
+                .ToListAsync();
+
+            return (employees, totalCount);
+        }, pageNumber, pageSize, "Get unassigned employees");
+    }
+
+    // ?? NEW: Assign employee to department after creation
+    public async Task<ApiResponse<EmployeeDto>> AssignEmployeeToDepartmentAsync(string employeeCode, AssignEmployeeToDepartmentRequest request)
+    {
+        return await HandleOperationAsync(async () =>
+        {
+            var employee = await _context.Employees
+                .FirstOrDefaultAsync(e => e.EmployeeCode == employeeCode && e.IsActive);
+
+            if (employee == null)
+            {
+                throw new InvalidOperationException("Employee not found or inactive");
+            }
+
+            // Validate department
+            await ValidateDepartmentAsync(request.DepartmentId);
+
+            // Check team leader constraint if setting as team leader
+            if (request.SetAsTeamLeader)
+            {
+                await ValidateTeamLeaderConstraintAsync(request.DepartmentId, employee.Id);
+            }
+
+            // Remove from current department team leader role if needed
+            if (employee.IsTeamLeader && employee.DepartmentId.HasValue)
+            {
+                await ClearDepartmentTeamLeaderAsync(employee.DepartmentId.Value, employee.EmployeeCode);
+            }
+
+            // Update employee
+            employee.DepartmentId = request.DepartmentId;
+            employee.IsTeamLeader = request.SetAsTeamLeader;
+            employee.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            // Update department team leader if needed
+            if (request.SetAsTeamLeader)
+            {
+                await UpdateDepartmentTeamLeaderAsync(request.DepartmentId, employee.EmployeeCode);
+            }
+
+            // Return updated employee
+            var updatedEmployee = await GetEmployeeByIdAsync(employee.Id);
+            return updatedEmployee.Data!;
+        }, "Assign employee to department");
+    }
+
+    // ?? NEW: Update employee's department assignment
+    public async Task<ApiResponse<EmployeeDto>> UpdateEmployeeDepartmentAsync(string employeeCode, UpdateEmployeeDepartmentRequest request)
+    {
+        return await HandleOperationAsync(async () =>
+        {
+            var employee = await _context.Employees
+                .FirstOrDefaultAsync(e => e.EmployeeCode == employeeCode && e.IsActive);
+
+            if (employee == null)
+            {
+                throw new InvalidOperationException("Employee not found or inactive");
+            }
+
+            // Handle removing from department
+            if (!request.DepartmentId.HasValue)
+            {
+                return await RemoveEmployeeFromDepartmentInternal(employee);
+            }
+
+            // Validate new department
+            await ValidateDepartmentAsync(request.DepartmentId.Value);
+
+            // Check team leader constraint if setting as team leader
+            if (request.IsTeamLeader)
+            {
+                await ValidateTeamLeaderConstraintAsync(request.DepartmentId.Value, employee.Id);
+            }
+
+            var oldDepartmentId = employee.DepartmentId;
+            var wasTeamLeader = employee.IsTeamLeader;
+
+            // Remove from old department team leader role if needed
+            if (wasTeamLeader && oldDepartmentId.HasValue)
+            {
+                await ClearDepartmentTeamLeaderAsync(oldDepartmentId.Value, employee.EmployeeCode);
+            }
+
+            // Update employee
+            employee.DepartmentId = request.DepartmentId;
+            employee.IsTeamLeader = request.IsTeamLeader;
+            employee.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            // Update new department team leader if needed
+            if (request.IsTeamLeader)
+            {
+                await UpdateDepartmentTeamLeaderAsync(request.DepartmentId.Value, employee.EmployeeCode);
+            }
+
+            // Return updated employee
+            var updatedEmployee = await GetEmployeeByIdAsync(employee.Id);
+            return updatedEmployee.Data!;
+        }, "Update employee department");
+    }
+
+    // ?? NEW: Remove employee from department
+    public async Task<ApiResponse<EmployeeDto>> RemoveEmployeeFromDepartmentAsync(string employeeCode)
+    {
+        return await HandleOperationAsync(async () =>
+        {
+            var employee = await _context.Employees
+                .FirstOrDefaultAsync(e => e.EmployeeCode == employeeCode && e.IsActive);
+
+            if (employee == null)
+            {
+                throw new InvalidOperationException("Employee not found or inactive");
+            }
+
+            return await RemoveEmployeeFromDepartmentInternal(employee);
+        }, "Remove employee from department");
+    }
+
+    private async Task<EmployeeDto> RemoveEmployeeFromDepartmentInternal(Employee employee)
+    {
+        // Remove from department team leader role if needed
+        if (employee.IsTeamLeader && employee.DepartmentId.HasValue)
+        {
+            await ClearDepartmentTeamLeaderAsync(employee.DepartmentId.Value, employee.EmployeeCode);
+        }
+
+        // Update employee
+        employee.DepartmentId = null;
+        employee.IsTeamLeader = false;
+        employee.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Return updated employee
+        var updatedEmployee = await GetEmployeeByIdAsync(employee.Id);
+        return updatedEmployee.Data!;
     }
 
     public async Task<ApiResponse<EmployeeDto>> CreateEmployeeAsync(CreateEmployeeRequest request)

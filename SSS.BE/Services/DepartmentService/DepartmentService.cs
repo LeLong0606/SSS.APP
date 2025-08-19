@@ -16,6 +16,12 @@ public interface IDepartmentService
     Task<PagedResponse<EmployeeDto>> GetDepartmentEmployeesAsync(int id, int pageNumber, int pageSize, string? search);
     Task<ApiResponse<object>> AssignTeamLeaderAsync(int id, string employeeCode);
     Task<ApiResponse<object>> RemoveTeamLeaderAsync(int id);
+
+    // ?? NEW: Flexible department management methods
+    Task<PagedResponse<DepartmentDto>> GetDepartmentsWithoutTeamLeaderAsync(int pageNumber, int pageSize);
+    Task<ApiResponse<DepartmentDto>> AssignTeamLeaderAdvancedAsync(int id, AssignTeamLeaderRequest request);
+    Task<ApiResponse<DepartmentAssignmentResult>> BulkAssignEmployeesToDepartmentAsync(int id, BulkAssignToDepartmentRequest request);
+    Task<ApiResponse<DepartmentAssignmentResult>> ManageDepartmentEmployeesAsync(int id, ManageDepartmentEmployeesRequest request);
 }
 
 public class DepartmentService : BaseService, IDepartmentService
@@ -131,6 +137,368 @@ public class DepartmentService : BaseService, IDepartmentService
 
             return department;
         }, "Get department by ID");
+    }
+
+    // ?? NEW: Get departments without team leaders
+    public async Task<PagedResponse<DepartmentDto>> GetDepartmentsWithoutTeamLeaderAsync(int pageNumber, int pageSize)
+    {
+        return await HandlePagedOperationAsync(async () =>
+        {
+            var query = _context.Departments
+                .Where(d => d.IsActive && d.TeamLeaderId == null);
+
+            var totalCount = await query.CountAsync();
+            
+            var departments = await query
+                .OrderBy(d => d.Name)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(d => new DepartmentDto
+                {
+                    Id = d.Id,
+                    Name = d.Name,
+                    DepartmentCode = d.DepartmentCode,
+                    Description = d.Description,
+                    IsActive = d.IsActive,
+                    CreatedAt = d.CreatedAt,
+                    UpdatedAt = d.UpdatedAt,
+                    TeamLeaderEmployeeCode = null,
+                    TeamLeaderFullName = null,
+                    EmployeeCount = d.Employees.Count(e => e.IsActive),
+                    Employees = null
+                })
+                .ToListAsync();
+
+            return (departments, totalCount);
+        }, pageNumber, pageSize, "Get departments without team leader");
+    }
+
+    // ?? NEW: Advanced team leader assignment with auto-transfer
+    public async Task<ApiResponse<DepartmentDto>> AssignTeamLeaderAdvancedAsync(int id, AssignTeamLeaderRequest request)
+    {
+        return await HandleOperationAsync(async () =>
+        {
+            var department = await _context.Departments
+                .Include(d => d.TeamLeader)
+                .FirstOrDefaultAsync(d => d.Id == id && d.IsActive);
+
+            if (department == null)
+            {
+                throw new InvalidOperationException("Department not found");
+            }
+
+            var newTeamLeader = await _context.Employees
+                .FirstOrDefaultAsync(e => e.EmployeeCode == request.EmployeeCode && e.IsActive);
+
+            if (newTeamLeader == null)
+            {
+                throw new InvalidOperationException("Employee not found or inactive");
+            }
+
+            // Validate team leader constraints
+            await ValidateTeamLeaderAssignmentAsync(newTeamLeader, id);
+
+            // Remove current team leader if exists
+            if (department.TeamLeader != null)
+            {
+                department.TeamLeader.IsTeamLeader = false;
+                department.TeamLeader.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Assign new team leader
+            department.TeamLeaderId = newTeamLeader.EmployeeCode;
+            department.UpdatedAt = DateTime.UtcNow;
+
+            newTeamLeader.IsTeamLeader = true;
+            newTeamLeader.UpdatedAt = DateTime.UtcNow;
+
+            // Auto-transfer employee to department if requested
+            if (request.TransferEmployeeToDepartment)
+            {
+                newTeamLeader.DepartmentId = department.Id;
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Return updated department
+            var updatedDepartment = await GetDepartmentByIdAsync(id, false);
+            return updatedDepartment.Data!;
+        }, "Assign team leader advanced");
+    }
+
+    // ?? NEW: Bulk assign employees to department
+    public async Task<ApiResponse<DepartmentAssignmentResult>> BulkAssignEmployeesToDepartmentAsync(int id, BulkAssignToDepartmentRequest request)
+    {
+        return await HandleOperationAsync(async () =>
+        {
+            var department = await _context.Departments
+                .Include(d => d.TeamLeader)
+                .FirstOrDefaultAsync(d => d.Id == id && d.IsActive);
+
+            if (department == null)
+            {
+                throw new InvalidOperationException("Department not found");
+            }
+
+            var result = new DepartmentAssignmentResult
+            {
+                DepartmentId = department.Id,
+                DepartmentName = department.Name,
+                EmployeeResults = new List<EmployeeAssignmentResult>(),
+                PreviousTeamLeaderCode = department.TeamLeaderId
+            };
+
+            // Get all employees to be assigned
+            var employees = await _context.Employees
+                .Where(e => request.EmployeeCodes.Contains(e.EmployeeCode) && e.IsActive)
+                .ToListAsync();
+
+            foreach (var employeeCode in request.EmployeeCodes)
+            {
+                var employee = employees.FirstOrDefault(e => e.EmployeeCode == employeeCode);
+                var employeeResult = new EmployeeAssignmentResult
+                {
+                    EmployeeCode = employeeCode,
+                    EmployeeName = employee?.FullName ?? "Unknown",
+                    Action = "Added"
+                };
+
+                try
+                {
+                    if (employee == null)
+                    {
+                        employeeResult.Success = false;
+                        employeeResult.Message = "Employee not found or inactive";
+                    }
+                    else
+                    {
+                        // Remove from current team leader role if needed
+                        if (employee.IsTeamLeader && employee.DepartmentId != id)
+                        {
+                            await ClearEmployeeTeamLeaderRole(employee);
+                        }
+
+                        // Assign to department
+                        employee.DepartmentId = id;
+                        employee.UpdatedAt = DateTime.UtcNow;
+
+                        employeeResult.Success = true;
+                        employeeResult.Message = "Successfully assigned to department";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    employeeResult.Success = false;
+                    employeeResult.Message = ex.Message;
+                }
+
+                result.EmployeeResults.Add(employeeResult);
+            }
+
+            // Handle team leader assignment if specified
+            if (!string.IsNullOrEmpty(request.TeamLeaderEmployeeCode))
+            {
+                var teamLeaderEmployee = employees.FirstOrDefault(e => e.EmployeeCode == request.TeamLeaderEmployeeCode);
+                if (teamLeaderEmployee != null)
+                {
+                    // Remove current team leader if exists
+                    if (department.TeamLeader != null && department.TeamLeader.EmployeeCode != request.TeamLeaderEmployeeCode)
+                    {
+                        department.TeamLeader.IsTeamLeader = false;
+                        department.TeamLeader.UpdatedAt = DateTime.UtcNow;
+                    }
+
+                    // Set new team leader
+                    department.TeamLeaderId = teamLeaderEmployee.EmployeeCode;
+                    teamLeaderEmployee.IsTeamLeader = true;
+                    teamLeaderEmployee.DepartmentId = id;
+                    teamLeaderEmployee.UpdatedAt = DateTime.UtcNow;
+
+                    result.NewTeamLeaderCode = request.TeamLeaderEmployeeCode;
+
+                    // Update the employee result for team leader
+                    var teamLeaderResult = result.EmployeeResults.FirstOrDefault(r => r.EmployeeCode == request.TeamLeaderEmployeeCode);
+                    if (teamLeaderResult != null)
+                    {
+                        teamLeaderResult.Action = "Added as Team Leader";
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return result;
+        }, "Bulk assign employees to department");
+    }
+
+    // ?? NEW: Manage department employees (add, remove, change team leader)
+    public async Task<ApiResponse<DepartmentAssignmentResult>> ManageDepartmentEmployeesAsync(int id, ManageDepartmentEmployeesRequest request)
+    {
+        return await HandleOperationAsync(async () =>
+        {
+            var department = await _context.Departments
+                .Include(d => d.TeamLeader)
+                .FirstOrDefaultAsync(d => d.Id == id && d.IsActive);
+
+            if (department == null)
+            {
+                throw new InvalidOperationException("Department not found");
+            }
+
+            var result = new DepartmentAssignmentResult
+            {
+                DepartmentId = department.Id,
+                DepartmentName = department.Name,
+                EmployeeResults = new List<EmployeeAssignmentResult>(),
+                PreviousTeamLeaderCode = department.TeamLeaderId
+            };
+
+            // Add employees
+            if (request.AddEmployees.Any())
+            {
+                var employeesToAdd = await _context.Employees
+                    .Where(e => request.AddEmployees.Contains(e.EmployeeCode) && e.IsActive)
+                    .ToListAsync();
+
+                foreach (var employeeCode in request.AddEmployees)
+                {
+                    var employee = employeesToAdd.FirstOrDefault(e => e.EmployeeCode == employeeCode);
+                    var employeeResult = new EmployeeAssignmentResult
+                    {
+                        EmployeeCode = employeeCode,
+                        EmployeeName = employee?.FullName ?? "Unknown",
+                        Action = "Added"
+                    };
+
+                    try
+                    {
+                        if (employee == null)
+                        {
+                            employeeResult.Success = false;
+                            employeeResult.Message = "Employee not found or inactive";
+                        }
+                        else
+                        {
+                            // Remove from current team leader role if needed
+                            if (employee.IsTeamLeader && employee.DepartmentId != id)
+                            {
+                                await ClearEmployeeTeamLeaderRole(employee);
+                            }
+
+                            employee.DepartmentId = id;
+                            employee.UpdatedAt = DateTime.UtcNow;
+
+                            employeeResult.Success = true;
+                            employeeResult.Message = "Successfully added to department";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        employeeResult.Success = false;
+                        employeeResult.Message = ex.Message;
+                    }
+
+                    result.EmployeeResults.Add(employeeResult);
+                }
+            }
+
+            // Remove employees
+            if (request.RemoveEmployees.Any())
+            {
+                var employeesToRemove = await _context.Employees
+                    .Where(e => request.RemoveEmployees.Contains(e.EmployeeCode) && e.DepartmentId == id && e.IsActive)
+                    .ToListAsync();
+
+                foreach (var employeeCode in request.RemoveEmployees)
+                {
+                    var employee = employeesToRemove.FirstOrDefault(e => e.EmployeeCode == employeeCode);
+                    var employeeResult = new EmployeeAssignmentResult
+                    {
+                        EmployeeCode = employeeCode,
+                        EmployeeName = employee?.FullName ?? "Unknown",
+                        Action = "Removed"
+                    };
+
+                    try
+                    {
+                        if (employee == null)
+                        {
+                            employeeResult.Success = false;
+                            employeeResult.Message = "Employee not found or not in this department";
+                        }
+                        else
+                        {
+                            // Remove team leader status if applicable
+                            if (employee.IsTeamLeader)
+                            {
+                                employee.IsTeamLeader = false;
+                                department.TeamLeaderId = null;
+                            }
+
+                            employee.DepartmentId = null;
+                            employee.UpdatedAt = DateTime.UtcNow;
+
+                            employeeResult.Success = true;
+                            employeeResult.Message = "Successfully removed from department";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        employeeResult.Success = false;
+                        employeeResult.Message = ex.Message;
+                    }
+
+                    result.EmployeeResults.Add(employeeResult);
+                }
+            }
+
+            // Change team leader
+            if (!string.IsNullOrEmpty(request.NewTeamLeaderCode))
+            {
+                var newTeamLeader = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.EmployeeCode == request.NewTeamLeaderCode && e.IsActive);
+
+                if (newTeamLeader != null)
+                {
+                    // Remove current team leader
+                    if (department.TeamLeader != null)
+                    {
+                        department.TeamLeader.IsTeamLeader = false;
+                        department.TeamLeader.UpdatedAt = DateTime.UtcNow;
+                    }
+
+                    // Set new team leader
+                    department.TeamLeaderId = newTeamLeader.EmployeeCode;
+                    newTeamLeader.IsTeamLeader = true;
+                    newTeamLeader.DepartmentId = id;
+                    newTeamLeader.UpdatedAt = DateTime.UtcNow;
+
+                    result.NewTeamLeaderCode = request.NewTeamLeaderCode;
+
+                    // Add or update result for new team leader
+                    var teamLeaderResult = result.EmployeeResults.FirstOrDefault(r => r.EmployeeCode == request.NewTeamLeaderCode);
+                    if (teamLeaderResult != null)
+                    {
+                        teamLeaderResult.Action += " and Set as Team Leader";
+                    }
+                    else
+                    {
+                        result.EmployeeResults.Add(new EmployeeAssignmentResult
+                        {
+                            EmployeeCode = request.NewTeamLeaderCode,
+                            EmployeeName = newTeamLeader.FullName,
+                            Action = "Set as Team Leader",
+                            Success = true,
+                            Message = "Successfully assigned as team leader"
+                        });
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return result;
+        }, "Manage department employees");
     }
 
     public async Task<ApiResponse<DepartmentDto>> CreateDepartmentAsync(CreateDepartmentRequest request)
@@ -469,5 +837,23 @@ public class DepartmentService : BaseService, IDepartmentService
         }
 
         return Task.CompletedTask;
+    }
+
+    private async Task ClearEmployeeTeamLeaderRole(Employee employee)
+    {
+        if (employee.IsTeamLeader && employee.DepartmentId.HasValue)
+        {
+            // Clear team leader reference in the old department
+            var oldDepartment = await _context.Departments
+                .FirstOrDefaultAsync(d => d.Id == employee.DepartmentId.Value);
+            
+            if (oldDepartment != null && oldDepartment.TeamLeaderId == employee.EmployeeCode)
+            {
+                oldDepartment.TeamLeaderId = null;
+                oldDepartment.UpdatedAt = DateTime.UtcNow;
+            }
+
+            employee.IsTeamLeader = false;
+        }
     }
 }

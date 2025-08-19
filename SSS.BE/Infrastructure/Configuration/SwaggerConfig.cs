@@ -10,12 +10,12 @@ public static class SwaggerConfig
         {
             c.SwaggerDoc("v1", new OpenApiInfo
             {
-                Title = "SSS Authentication API",
-                Version = "v1",
-                Description = "API for authentication management with JWT Token"
+                Title = "SSS Attendance Management API",
+                Version = "v2.1.0",
+                Description = "API for employee management, attendance tracking, shift management, and payroll export with JWT Authentication"
             });
 
-            // Configure JWT Authentication in Swagger - ONLY ADD AUTHORIZE BUTTON
+            // Basic JWT Authentication configuration
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -40,15 +40,21 @@ public static class SwaggerConfig
                     Array.Empty<string>()
                 }
             });
+
+            // Simple conflict resolution
+            c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
         });
     }
 
     public static void UseSwaggerDefault(this WebApplication app)
     {
-        if (app.Environment.IsDevelopment())
+        app.UseSwagger();
+        
+        app.UseSwaggerUI(c =>
         {
-            app.UseSwagger();
-            app.UseSwaggerUI();
-        }
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "SSS Attendance Management API v2.1.0");
+            c.RoutePrefix = "swagger";
+            c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
+        });
     }
 }

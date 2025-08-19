@@ -54,6 +54,18 @@ public class DepartmentController : ControllerBase
     }
 
     /// <summary>
+    /// ?? Get departments without team leaders (All authenticated users can view)
+    /// </summary>
+    [HttpGet("without-team-leader")]
+    public async Task<ActionResult<PagedResponse<DepartmentDto>>> GetDepartmentsWithoutTeamLeader(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        var result = await _departmentService.GetDepartmentsWithoutTeamLeaderAsync(pageNumber, pageSize);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Create a new department (Administrator and Director can create)
     /// </summary>
     [HttpPost]
@@ -76,6 +88,135 @@ public class DepartmentController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new ApiResponse<DepartmentDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
+            });
+        }
+    }
+
+    /// <summary>
+    /// ?? Assign team leader to department after creation (Administrator and Director can assign)
+    /// </summary>
+    [HttpPost("{id}/assign-team-leader-advanced")]
+    [Authorize(Roles = "Administrator,Director")]
+    public async Task<ActionResult<ApiResponse<DepartmentDto>>> AssignTeamLeaderAdvanced(
+        int id, 
+        [FromBody] AssignTeamLeaderRequest request)
+    {
+        try
+        {
+            var result = await _departmentService.AssignTeamLeaderAdvancedAsync(id, request);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            _logger.LogInformation("Employee {EmployeeCode} assigned as team leader for department {DepartmentId} with transfer={Transfer}", 
+                request.EmployeeCode, id, request.TransferEmployeeToDepartment);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+            {
+                return NotFound(new ApiResponse<DepartmentDto>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
+            return BadRequest(new ApiResponse<DepartmentDto>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
+            });
+        }
+    }
+
+    /// <summary>
+    /// ?? Bulk assign employees to department (Administrator and Director can assign)
+    /// </summary>
+    [HttpPost("{id}/bulk-assign-employees")]
+    [Authorize(Roles = "Administrator,Director")]
+    public async Task<ActionResult<ApiResponse<DepartmentAssignmentResult>>> BulkAssignEmployees(
+        int id, 
+        [FromBody] BulkAssignToDepartmentRequest request)
+    {
+        try
+        {
+            var result = await _departmentService.BulkAssignEmployeesToDepartmentAsync(id, request);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            _logger.LogInformation("Bulk assignment completed for department {DepartmentId}: {EmployeeCount} employees, Team Leader: {TeamLeader}", 
+                id, request.EmployeeCodes.Count, request.TeamLeaderEmployeeCode ?? "None");
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+            {
+                return NotFound(new ApiResponse<DepartmentAssignmentResult>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
+            return BadRequest(new ApiResponse<DepartmentAssignmentResult>
+            {
+                Success = false,
+                Message = ex.Message,
+                Errors = new List<string> { ex.Message }
+            });
+        }
+    }
+
+    /// <summary>
+    /// ?? Manage department employees (add, remove, change team leader) (Administrator and Director can manage)
+    /// </summary>
+    [HttpPost("{id}/manage-employees")]
+    [Authorize(Roles = "Administrator,Director")]
+    public async Task<ActionResult<ApiResponse<DepartmentAssignmentResult>>> ManageDepartmentEmployees(
+        int id, 
+        [FromBody] ManageDepartmentEmployeesRequest request)
+    {
+        try
+        {
+            var result = await _departmentService.ManageDepartmentEmployeesAsync(id, request);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            _logger.LogInformation("Department {DepartmentId} employee management completed: +{AddCount} -{RemoveCount} TL:{TeamLeader}", 
+                id, request.AddEmployees.Count, request.RemoveEmployees.Count, request.NewTeamLeaderCode ?? "No Change");
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+            {
+                return NotFound(new ApiResponse<DepartmentAssignmentResult>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
+            return BadRequest(new ApiResponse<DepartmentAssignmentResult>
             {
                 Success = false,
                 Message = ex.Message,
