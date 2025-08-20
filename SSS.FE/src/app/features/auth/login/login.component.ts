@@ -25,6 +25,7 @@ export class LoginComponent implements OnInit {
   
   // Error handling
   error: string | null = null;
+  errorTimeout: any;
 
   constructor(
     private fb: FormBuilder,
@@ -39,6 +40,16 @@ export class LoginComponent implements OnInit {
   ngOnInit(): void {
     // Get return URL from query params
     this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
+    
+    // Clear any existing errors on component init
+    this.clearError();
+  }
+
+  ngOnDestroy(): void {
+    // Clear timeout when component is destroyed
+    if (this.errorTimeout) {
+      clearTimeout(this.errorTimeout);
+    }
   }
 
   private createLoginForm(): FormGroup {
@@ -56,7 +67,7 @@ export class LoginComponent implements OnInit {
     }
 
     // Clear any previous error
-    this.error = null;
+    this.clearError();
     this.isLoading = true;
     
     const loginData: LoginRequest = {
@@ -104,6 +115,14 @@ export class LoginComponent implements OnInit {
       } else {
         errorMessage = 'Thông tin đăng nhập không hợp lệ. Vui lòng kiểm tra email và mật khẩu.';
       }
+    } else if (error.status === 401) {
+      errorMessage = 'Email hoặc mật khẩu không chính xác. Vui lòng thử lại.';
+    } else if (error.status === 403) {
+      errorMessage = 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.';
+    } else if (error.status === 429) {
+      errorMessage = 'Quá nhiều lần thử đăng nhập. Vui lòng đợi một lúc rồi thử lại.';
+    } else if (error.status >= 500) {
+      errorMessage = 'Lỗi server. Vui lòng thử lại sau.';
     } else if (error.error && error.error.message) {
       errorMessage = error.error.message;
     }
@@ -111,10 +130,27 @@ export class LoginComponent implements OnInit {
     console.error('Login error:', error);
     
     // Set error for display in template
-    this.error = errorMessage;
+    this.setError(errorMessage);
     
     // Also show notification
     this.notificationService.showError(errorMessage);
+  }
+
+  private setError(message: string): void {
+    this.error = message;
+    
+    // Auto-clear error after 8 seconds
+    this.errorTimeout = setTimeout(() => {
+      this.clearError();
+    }, 8000);
+  }
+
+  private clearError(): void {
+    this.error = null;
+    if (this.errorTimeout) {
+      clearTimeout(this.errorTimeout);
+      this.errorTimeout = null;
+    }
   }
 
   private markFormGroupTouched(): void {
@@ -163,5 +199,12 @@ export class LoginComponent implements OnInit {
   // Navigation to register
   navigateToRegister(): void {
     this.router.navigate(['/auth/register']);
+  }
+
+  // Clear error when user starts typing
+  onInputChange(): void {
+    if (this.error) {
+      this.clearError();
+    }
   }
 }
