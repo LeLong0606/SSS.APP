@@ -61,9 +61,9 @@ export class WorkShiftFormComponent implements OnInit, OnDestroy {
 
   // Quick time presets
   timePresets = [
-    { label: 'Ca sáng (8:00 - 12:00)', start: '08:00', end: '12:00' },
-    { label: 'Ca chiều (13:00 - 17:00)', start: '13:00', end: '17:00' },
-    { label: 'Ca tối (18:00 - 22:00)', start: '18:00', end: '22:00' },
+    { label: 'Ca sáng (7:30 - 15:30)', start: '07:30', end: '15:30' },
+    { label: 'Ca chiều (14:00 - 22:00)', start: '14:00', end: '22:00' },
+    { label: 'Ca tối (21:00 - 05:00)', start: '21:00', end: '05:00' },
     { label: 'Ca đêm (22:00 - 06:00)', start: '22:00', end: '06:00' },
     { label: 'Ca cả ngày (8:00 - 17:00)', start: '08:00', end: '17:00' }
   ];
