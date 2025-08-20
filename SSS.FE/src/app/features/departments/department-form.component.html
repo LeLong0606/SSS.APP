@@ -1,0 +1,212 @@
+<div class="department-form-container">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải dữ liệu...</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h2>{{ isEditMode ? 'Chỉnh sửa phòng ban' : 'Thêm phòng ban mới' }}</h2>
+        <p class="subtitle">
+          {{ isEditMode ? 'Cập nhật thông tin phòng ban' : 'Tạo phòng ban mới trong hệ thống' }}
+        </p>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary"
+          (click)="onCancel()"
+          [disabled]="isSubmitting">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+          Hủy bỏ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Content -->
+  <div class="form-content" *ngIf="!isLoading">
+    <div class="form-card">
+      <form [formGroup]="departmentForm" (ngSubmit)="onSubmit()" class="department-form">
+        
+        <!-- Basic Information Section -->
+        <div class="form-section">
+          <h3 class="section-title">
+            <svg class="section-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+            Thông tin cơ bản
+          </h3>
+          
+          <div class="form-row">
+            <!-- Department Name -->
+            <div class="form-group col-md-6">
+              <label for="name" class="form-label">
+                Tên phòng ban <span class="required">*</span>
+              </label>
+              <input 
+                type="text" 
+                id="name"
+                formControlName="name"
+                class="form-control"
+                [class.is-invalid]="isFieldInvalid('name')"
+                placeholder="Nhập tên phòng ban"
+                required>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('name')">
+                {{ getFieldError('name') }}
+              </div>
+            </div>
+
+            <!-- Department Code -->
+            <div class="form-group col-md-6">
+              <label for="departmentCode" class="form-label">
+                Mã phòng ban <span class="required">*</span>
+              </label>
+              <input 
+                type="text" 
+                id="departmentCode"
+                formControlName="departmentCode"
+                class="form-control"
+                [class.is-invalid]="isFieldInvalid('departmentCode')"
+                placeholder="VD: IT, HR, SALES"
+                (blur)="checkDepartmentCodeUnique()"
+                required>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('departmentCode')">
+                {{ getFieldError('departmentCode') }}
+              </div>
+              <small class="form-text text-muted">
+                Chỉ sử dụng chữ cái, số và dấu gạch ngang
+              </small>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div class="form-group">
+            <label for="description" class="form-label">Mô tả</label>
+            <textarea 
+              id="description"
+              formControlName="description"
+              class="form-control"
+              [class.is-invalid]="isFieldInvalid('description')"
+              placeholder="Mô tả về phòng ban, chức năng, nhiệm vụ..."
+              rows="3"></textarea>
+            <div class="invalid-feedback" *ngIf="isFieldInvalid('description')">
+              {{ getFieldError('description') }}
+            </div>
+            <small class="form-text text-muted">
+              Tối đa 500 ký tự
+            </small>
+          </div>
+        </div>
+
+        <!-- Management Section -->
+        <div class="form-section">
+          <h3 class="section-title">
+            <svg class="section-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A1.5 1.5 0 0 0 18.54 8H17c-.8 0-1.54.37-2.01 1l-2.7 3.6c-.34.45-.54 1-.54 1.6v6h2m-8-2c0 1.1-.9 2-2 2s-2-.9-2-2v-6h4v6z"/>
+            </svg>
+            Quản lý & Cấu trúc
+          </h3>
+          
+          <div class="form-row">
+            <!-- Team Leader -->
+            <div class="form-group col-md-6">
+              <label for="teamLeaderEmployeeCode" class="form-label">Trưởng phòng</label>
+              <select 
+                id="teamLeaderEmployeeCode"
+                formControlName="teamLeaderEmployeeCode"
+                class="form-select"
+                [class.is-invalid]="isFieldInvalid('teamLeaderEmployeeCode')">
+                <option value="">Chọn trưởng phòng</option>
+                <option *ngFor="let emp of getAvailableTeamLeaders()" 
+                        [value]="emp.employeeCode">
+                  {{ emp.fullName }} ({{ emp.employeeCode }})
+                </option>
+              </select>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('teamLeaderEmployeeCode')">
+                {{ getFieldError('teamLeaderEmployeeCode') }}
+              </div>
+              <small class="form-text text-muted">
+                Chọn nhân viên làm trưởng phòng
+              </small>
+            </div>
+
+            <!-- Parent Department -->
+            <div class="form-group col-md-6">
+              <label for="parentDepartmentId" class="form-label">Phòng ban cha</label>
+              <select 
+                id="parentDepartmentId"
+                formControlName="parentDepartmentId"
+                class="form-select"
+                [class.is-invalid]="isFieldInvalid('parentDepartmentId')">
+                <option value="">Không có phòng ban cha</option>
+                <!-- TODO: Load parent departments when API is available -->
+                <option value="1">Phòng ban mẫu</option>
+              </select>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('parentDepartmentId')">
+                {{ getFieldError('parentDepartmentId') }}
+              </div>
+              <small class="form-text text-muted">
+                Chọn phòng ban cấp cao hơn (nếu có)
+              </small>
+            </div>
+          </div>
+
+          <!-- Status -->
+          <div class="form-group">
+            <div class="form-check">
+              <input 
+                type="checkbox" 
+                id="isActive"
+                formControlName="isActive"
+                class="form-check-input">
+              <label class="form-check-label" for="isActive">
+                Phòng ban đang hoạt động
+              </label>
+            </div>
+            <small class="form-text text-muted">
+              Bỏ chọn nếu phòng ban tạm ngừng hoạt động
+            </small>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <div class="action-buttons">
+            <button 
+              type="button" 
+              class="btn btn-secondary"
+              (click)="onCancel()"
+              [disabled]="isSubmitting">
+              <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+              Hủy bỏ
+            </button>
+            
+            <button 
+              type="submit" 
+              class="btn btn-primary"
+              [disabled]="departmentForm.invalid || isSubmitting">
+              <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24" *ngIf="!isSubmitting">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <div class="spinner-border spinner-border-sm" role="status" *ngIf="isSubmitting">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              {{ isSubmitting ? 'Đang xử lý...' : (isEditMode ? 'Cập nhật' : 'Tạo mới') }}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

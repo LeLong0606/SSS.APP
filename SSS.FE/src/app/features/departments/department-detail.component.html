@@ -1,0 +1,358 @@
+<div class="department-detail-container">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải dữ liệu...</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="page-header" *ngIf="department">
+    <div class="header-content">
+      <div class="title-section">
+        <button 
+          class="btn btn-link btn-back"
+          (click)="onBackToList()"
+          title="Quay lại danh sách">
+          <svg class="btn-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <div class="title-content">
+          <h1 class="department-title">{{ department.name }}</h1>
+          <p class="department-subtitle">
+            Mã: <strong>{{ department.departmentCode }}</strong> | 
+            Trạng thái: 
+            <span class="status-badge" [class]="getStatusClass(department.isActive)">
+              {{ getStatusText(department.isActive) }}
+            </span>
+          </p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary btn-sm"
+          (click)="refresh()"
+          [disabled]="isLoading"
+          title="Làm mới dữ liệu">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          Làm mới
+        </button>
+        <button 
+          class="btn btn-primary"
+          (click)="onEdit()"
+          *ngIf="canEdit"
+          [disabled]="isLoading">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+          Chỉnh sửa
+        </button>
+        <button 
+          class="btn btn-danger"
+          (click)="onDelete()"
+          *ngIf="canDelete"
+          [disabled]="isLoading">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+          Xóa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content-wrapper" *ngIf="department && !isLoading">
+    
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'overview'"
+        (click)="setActiveTab('overview')">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+        </svg>
+        Tổng quan
+      </button>
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'employees'"
+        (click)="setActiveTab('employees')">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+        Nhân viên ({{ employees.length }})
+      </button>
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'structure'"
+        (click)="setActiveTab('structure')">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M3 3v18h18V3H3zm8 16H5v-6h6v6zm0-8H5V5h6v6zm8 8h-6v-6h6v6zm0-8h-6V5h6v6z"/>
+        </svg>
+        Cấu trúc
+      </button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      
+      <!-- Overview Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'overview'">
+        <div class="overview-grid">
+          
+          <!-- Basic Information Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg class="header-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Thông tin cơ bản
+              </h3>
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="info-label">Tên phòng ban:</span>
+                <span class="info-value">{{ department.name }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Mã phòng ban:</span>
+                <span class="info-value">{{ department.departmentCode }}</span>
+              </div>
+              <div class="info-row" *ngIf="department.description">
+                <span class="info-label">Mô tả:</span>
+                <span class="info-value">{{ department.description }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Trạng thái:</span>
+                <span class="status-badge" [class]="getStatusClass(department.isActive)">
+                  {{ getStatusText(department.isActive) }}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Ngày tạo:</span>
+                <span class="info-value">{{ formatDate(department.createdAt) }}</span>
+              </div>
+              <div class="info-row" *ngIf="department.updatedAt">
+                <span class="info-label">Cập nhật lần cuối:</span>
+                <span class="info-value">{{ formatDateTime(department.updatedAt) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Team Leader Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg class="header-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A1.5 1.5 0 0 0 18.54 8H17c-.8 0-1.54.37-2.01 1l-2.7 3.6c-.34.45-.54 1-.54 1.6v6h2m-8-2c0 1.1-.9 2-2 2s-2-.9-2-2v-6h4v6z"/>
+                </svg>
+                Trưởng phòng
+              </h3>
+              <div class="card-actions" *ngIf="canAssignTeamLeader">
+                <button 
+                  class="btn btn-sm btn-outline-primary"
+                  (click)="removeTeamLeader()"
+                  *ngIf="department.teamLeaderEmployeeCode">
+                  <svg class="btn-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  </svg>
+                  Bỏ nhiệm
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div *ngIf="department.teamLeaderEmployeeCode; else noLeader" class="team-leader-info">
+                <div class="leader-avatar">
+                  <img 
+                    [src]="'assets/images/default-avatar.svg'" 
+                    [alt]="department.teamLeaderFullName"
+                    class="avatar-img">
+                </div>
+                <div class="leader-details">
+                  <h4 class="leader-name">{{ department.teamLeaderFullName }}</h4>
+                  <p class="leader-code">{{ department.teamLeaderEmployeeCode }}</p>
+                  <span class="leader-role">Trưởng phòng</span>
+                </div>
+              </div>
+              <ng-template #noLeader>
+                <div class="no-leader">
+                  <svg class="no-leader-icon" width="48" height="48" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                  </svg>
+                  <p class="no-leader-text">Chưa có trưởng phòng</p>
+                  <button 
+                    class="btn btn-sm btn-primary"
+                    (click)="assignTeamLeader('')"
+                    *ngIf="canAssignTeamLeader">
+                    <svg class="btn-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                    </svg>
+                    Phân công trưởng phòng
+                  </button>
+                </div>
+              </ng-template>
+            </div>
+          </div>
+
+          <!-- Statistics Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg class="header-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                Thống kê
+              </h3>
+            </div>
+            <div class="card-body">
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-value">{{ department.employeeCount || 0 }}</div>
+                  <div class="stat-label">Nhân viên</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ department.isActive ? 'Hoạt động' : 'Tạm dừng' }}</div>
+                  <div class="stat-label">Trạng thái</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Employees Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'employees'">
+        <div class="employees-section">
+          <div class="section-header">
+            <h3 class="section-title">Danh sách nhân viên</h3>
+            <div class="section-actions">
+              <span class="employee-count">{{ employees.length }} nhân viên</span>
+            </div>
+          </div>
+
+          <!-- Loading State -->
+          <div class="loading-state" *ngIf="isLoadingEmployees">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Đang tải danh sách nhân viên...</p>
+          </div>
+
+          <!-- Employees List -->
+          <div class="employees-list" *ngIf="!isLoadingEmployees">
+            <div class="employee-card" *ngFor="let employee of employees; trackBy: trackByEmployeeId">
+              <div class="employee-avatar">
+                <img 
+                  [src]="'assets/images/default-avatar.svg'" 
+                  [alt]="employee.fullName"
+                  class="avatar-img">
+              </div>
+              <div class="employee-info">
+                <h4 class="employee-name">{{ employee.fullName }}</h4>
+                <p class="employee-code">{{ employee.employeeCode }}</p>
+                <p class="employee-position">{{ employee.position || 'Chưa có chức vụ' }}</p>
+                <div class="employee-status">
+                  <span class="status-badge" [class]="employee.isActive ? 'status-active' : 'status-inactive'">
+                    {{ employee.isActive ? 'Đang làm việc' : 'Nghỉ việc' }}
+                  </span>
+                </div>
+              </div>
+              <div class="employee-actions">
+                <button 
+                  class="btn btn-sm btn-outline-primary"
+                  (click)="viewEmployee(employee)"
+                  title="Xem chi tiết">
+                  <svg class="btn-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  Xem
+                </button>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" *ngIf="employees.length === 0">
+              <svg class="empty-icon" width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+              <h3>Không có nhân viên</h3>
+              <p>Phòng ban này chưa có nhân viên nào.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Structure Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'structure'">
+        <div class="structure-section">
+          <div class="section-header">
+            <h3 class="section-title">Cấu trúc tổ chức</h3>
+          </div>
+          
+          <div class="structure-content">
+            <div class="org-chart">
+              <!-- Parent Department -->
+              <div class="org-level parent-level" *ngIf="false">
+                <div class="org-item parent-item">
+                  <div class="org-card">
+                    <h4 class="org-title">Phòng ban cha</h4>
+                    <p class="org-name">Tên phòng ban cha</p>
+                  </div>
+                </div>
+                <div class="org-connector">
+                  <svg width="2" height="40" fill="currentColor">
+                    <rect width="2" height="40"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Current Department -->
+              <div class="org-level current-level">
+                <div class="org-item current-item">
+                  <div class="org-card current">
+                    <h4 class="org-title">Phòng ban hiện tại</h4>
+                    <p class="org-name">{{ department.name }}</p>
+                    <p class="org-code">{{ department.departmentCode }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sub Departments -->
+              <div class="org-level sub-level" *ngIf="false">
+                <div class="org-connector">
+                  <svg width="2" height="40" fill="currentColor">
+                    <rect width="2" height="40"/>
+                  </svg>
+                </div>
+                <div class="org-item sub-item">
+                  <div class="org-card">
+                    <h4 class="org-title">Phòng ban con</h4>
+                    <p class="org-name">Tên phòng ban con</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- No Structure Message -->
+              <div class="no-structure" *ngIf="true">
+                <svg class="no-structure-icon" width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                </svg>
+                <h3>Không có cấu trúc phức tạp</h3>
+                <p>Phòng ban này không có phòng ban cha hoặc con.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

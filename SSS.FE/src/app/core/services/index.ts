@@ -2,16 +2,18 @@
 export * from './auth.service';
 export * from './employee.service';
 export * from './department.service';
-export * from './work-location.service';
 export * from './work-shift.service';
-export * from './notification.service';
-export * from './loading.service';
-
-// New Services for Complete API Integration
-export * from './image.service';
+export * from './work-location.service';
 export * from './attendance.service';
-export * from './shift-management.service';
 export * from './payroll.service';
+export * from './shift-management.service';
+export * from './image.service';
+export * from './loading.service';
+export * from './notification.service';
+
+// Export DashboardService with specific interfaces to avoid conflicts
+export { DashboardService } from './dashboard.service';
+export type { DashboardStats, DashboardAttendanceStatus, RecentActivity } from './dashboard.service';
 
 // Service Interfaces and Models
 export * from '../models/api-response.model';

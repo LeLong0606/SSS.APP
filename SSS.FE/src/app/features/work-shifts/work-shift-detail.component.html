@@ -1,0 +1,449 @@
+<div class="work-shift-detail-container">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải dữ liệu...</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="page-header" *ngIf="workShift">
+    <div class="header-content">
+      <div class="title-section">
+        <button 
+          class="btn btn-link btn-back"
+          (click)="onBackToList()"
+          title="Quay lại danh sách">
+          <svg class="btn-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <div class="title-content">
+          <h1 class="page-title">Ca làm việc</h1>
+          <p class="page-subtitle">
+            <strong>{{ employee?.fullName || workShift.employeeCode }}</strong> - 
+            {{ formatDate(workShift.shiftDate) }} | 
+            <span class="status-badge" [class]="getShiftStatusClass()">
+              {{ getShiftStatus() }}
+            </span>
+          </p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary btn-sm"
+          (click)="refresh()"
+          [disabled]="isLoading"
+          title="Làm mới dữ liệu">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          Làm mới
+        </button>
+        <button 
+          class="btn btn-primary"
+          (click)="onEdit()"
+          *ngIf="canEdit"
+          [disabled]="isLoading">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+          Chỉnh sửa
+        </button>
+        <button 
+          class="btn btn-danger"
+          (click)="onDelete()"
+          *ngIf="canDelete"
+          [disabled]="isLoading">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+          Xóa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content-wrapper" *ngIf="workShift && !isLoading">
+    
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'overview'"
+        (click)="setActiveTab('overview')">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+        </svg>
+        Tổng quan
+      </button>
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'employee'"
+        (click)="setActiveTab('employee')">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+        Nhân viên
+      </button>
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'location'"
+        (click)="setActiveTab('location')">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+        Địa điểm
+      </button>
+      <button 
+        class="nav-tab"
+        [class.active]="activeTab === 'conflicts'"
+        (click)="setActiveTab('conflicts')"
+        *ngIf="conflictingShifts.length > 0">
+        <svg class="tab-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+        </svg>
+        Xung đột ({{ conflictingShifts.length }})
+      </button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      
+      <!-- Overview Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'overview'">
+        <div class="overview-grid">
+          
+          <!-- Shift Information Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg class="header-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                </svg>
+                Thông tin ca làm việc
+              </h3>
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="info-label">Ngày làm việc:</span>
+                <span class="info-value">{{ formatDate(workShift.shiftDate) }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Giờ bắt đầu:</span>
+                <span class="info-value">{{ formatTime(workShift.startTime) }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Giờ kết thúc:</span>
+                <span class="info-value">{{ formatTime(workShift.endTime) }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Thời gian làm việc:</span>
+                <span class="info-value">{{ calculateDuration() }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Trạng thái:</span>
+                <span class="status-badge" [class]="getShiftStatusClass()">
+                  {{ getShiftStatus() }}
+                </span>
+              </div>
+              <div class="info-row" *ngIf="workShift.createdAt">
+                <span class="info-label">Ngày tạo:</span>
+                <span class="info-value">{{ formatDateTime(workShift.createdAt) }}</span>
+              </div>
+              <div class="info-row" *ngIf="workShift.updatedAt">
+                <span class="info-label">Cập nhật lần cuối:</span>
+                <span class="info-value">{{ formatDateTime(workShift.updatedAt) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Employee Summary Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg class="header-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                Nhân viên
+              </h3>
+              <div class="card-actions">
+                <button 
+                  class="btn btn-sm btn-outline-primary"
+                  (click)="viewEmployee()"
+                  *ngIf="employee">
+                  <svg class="btn-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  Xem chi tiết
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="employee-info" *ngIf="employee; else employeeCodeOnly">
+                <div class="employee-avatar">
+                  <img 
+                    [src]="'assets/images/default-avatar.svg'" 
+                    [alt]="employee.fullName"
+                    class="avatar-img">
+                </div>
+                <div class="employee-details">
+                  <h4 class="employee-name">{{ employee.fullName }}</h4>
+                  <p class="employee-code">{{ employee.employeeCode }}</p>
+                  <p class="employee-position">{{ employee.position || 'Chưa có chức vụ' }}</p>
+                  <p class="employee-department">{{ employee.departmentName || 'Chưa có phòng ban' }}</p>
+                </div>
+              </div>
+              <ng-template #employeeCodeOnly>
+                <div class="employee-code-display">
+                  <svg class="code-icon" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                  </svg>
+                  <div>
+                    <h4>{{ workShift.employeeCode }}</h4>
+                    <p class="text-muted">Thông tin nhân viên không có sẵn</p>
+                  </div>
+                </div>
+              </ng-template>
+            </div>
+          </div>
+
+          <!-- Location Summary Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg class="header-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                Địa điểm làm việc
+              </h3>
+              <div class="card-actions">
+                <button 
+                  class="btn btn-sm btn-outline-primary"
+                  (click)="viewWorkLocation()"
+                  *ngIf="workLocation">
+                  <svg class="btn-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  Xem chi tiết
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="location-info" *ngIf="workLocation; else locationIdOnly">
+                <div class="location-details">
+                  <h4 class="location-name">{{ workLocation.name }}</h4>
+                  <p class="location-address">{{ getFullAddress() }}</p>
+                  <div class="location-meta">
+                    <span class="location-type">Văn phòng</span>
+                    <span class="location-status" 
+                          [class]="workLocation.isActive ? 'status-active' : 'status-inactive'">
+                      {{ workLocation.isActive ? 'Đang hoạt động' : 'Tạm đóng' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <ng-template #locationIdOnly>
+                <div class="location-id-display">
+                  <svg class="location-icon" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  <div>
+                    <h4>ID: {{ workShift.workLocationId }}</h4>
+                    <p class="text-muted">Thông tin địa điểm không có sẵn</p>
+                  </div>
+                </div>
+              </ng-template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Employee Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'employee'">
+        <div class="employee-detail-section">
+          <div class="section-header">
+            <h3 class="section-title">Chi tiết nhân viên</h3>
+          </div>
+          
+          <div class="employee-card" *ngIf="employee; else noEmployeeData">
+            <div class="employee-avatar-large">
+              <img 
+                [src]="'assets/images/default-avatar.svg'" 
+                [alt]="employee.fullName"
+                class="avatar-img-large">
+            </div>
+            <div class="employee-info-detailed">
+              <h2 class="employee-name">{{ employee.fullName }}</h2>
+              <div class="employee-meta">
+                <div class="meta-row">
+                  <span class="meta-label">Mã nhân viên:</span>
+                  <span class="meta-value">{{ employee.employeeCode }}</span>
+                </div>
+                <div class="meta-row" *ngIf="employee.position">
+                  <span class="meta-label">Chức vụ:</span>
+                  <span class="meta-value">{{ employee.position }}</span>
+                </div>
+                <div class="meta-row" *ngIf="employee.departmentName">
+                  <span class="meta-label">Phòng ban:</span>
+                  <span class="meta-value">{{ employee.departmentName }}</span>
+                </div>
+                <div class="meta-row" *ngIf="employee.employeeCode">
+                  <span class="meta-label">Mã nhân viên:</span>
+                  <span class="meta-value">{{ employee.employeeCode }}</span>
+                </div>
+                <div class="meta-row" *ngIf="employee.phoneNumber">
+                  <span class="meta-label">Số điện thoại:</span>
+                  <span class="meta-value">{{ employee.phoneNumber }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">Trạng thái:</span>
+                  <span class="status-badge" [class]="employee.isActive ? 'status-active' : 'status-inactive'">
+                    {{ employee.isActive ? 'Đang làm việc' : 'Nghỉ việc' }}
+                  </span>
+                </div>
+              </div>
+              <div class="employee-actions">
+                <button 
+                  class="btn btn-primary"
+                  (click)="viewEmployee()">
+                  <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  Xem hồ sơ nhân viên
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <ng-template #noEmployeeData>
+            <div class="no-data-message">
+              <svg class="no-data-icon" width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+              <h3>Không có thông tin nhân viên</h3>
+              <p>Mã nhân viên: <strong>{{ workShift.employeeCode }}</strong></p>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Location Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'location'">
+        <div class="location-detail-section">
+          <div class="section-header">
+            <h3 class="section-title">Chi tiết địa điểm làm việc</h3>
+          </div>
+          
+          <div class="location-card" *ngIf="workLocation; else noLocationData">
+            <div class="location-info-detailed">
+              <h2 class="location-name">{{ workLocation.name }}</h2>
+              <div class="location-meta">
+                <div class="meta-row">
+                  <span class="meta-label">Địa chỉ:</span>
+                  <span class="meta-value">{{ workLocation.address }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">Loại địa điểm:</span>
+                  <span class="meta-value">Văn phòng</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">Trạng thái:</span>
+                  <span class="status-badge" [class]="workLocation.isActive ? 'status-active' : 'status-inactive'">
+                    {{ workLocation.isActive ? 'Đang hoạt động' : 'Tạm đóng' }}
+                  </span>
+                </div>
+                <div class="meta-row" *ngIf="workLocation.description">
+                  <span class="meta-label">Mô tả:</span>
+                  <span class="meta-value">{{ workLocation.description }}</span>
+                </div>
+              </div>
+              <div class="location-actions">
+                <button 
+                  class="btn btn-primary"
+                  (click)="viewWorkLocation()">
+                  <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  Xem chi tiết địa điểm
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <ng-template #noLocationData>
+            <div class="no-data-message">
+              <svg class="no-data-icon" width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              <h3>Không có thông tin địa điểm</h3>
+              <p>ID địa điểm: <strong>{{ workShift.workLocationId }}</strong></p>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Conflicts Tab -->
+      <div class="tab-pane" *ngIf="activeTab === 'conflicts'">
+        <div class="conflicts-section">
+          <div class="section-header">
+            <h3 class="section-title">Ca làm việc bị xung đột</h3>
+            <div class="section-actions">
+              <span class="conflict-count">{{ conflictingShifts.length }} xung đột</span>
+            </div>
+          </div>
+          
+          <!-- Loading State -->
+          <div class="loading-state" *ngIf="isLoadingConflicts">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Đang kiểm tra xung đột...</p>
+          </div>
+
+          <!-- Conflicts List -->
+          <div class="conflicts-list" *ngIf="!isLoadingConflicts">
+            <div class="conflict-card" *ngFor="let shift of conflictingShifts; trackBy: trackByShiftId">
+              <div class="conflict-info">
+                <h4 class="conflict-title">
+                  {{ shift.employeeName || shift.employeeCode }}
+                </h4>
+                <p class="conflict-details">
+                  {{ formatDate(shift.shiftDate) }} | 
+                  {{ formatTime(shift.startTime) }} - {{ formatTime(shift.endTime) }}
+                </p>
+                <p class="conflict-location">
+                  Địa điểm: {{ shift.workLocationName || shift.workLocationId }}
+                </p>
+              </div>
+              <div class="conflict-actions">
+                <button 
+                  class="btn btn-sm btn-outline-primary"
+                  (click)="viewConflictingShift(shift)"
+                  title="Xem chi tiết">
+                  <svg class="btn-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  </svg>
+                  Xem
+                </button>
+              </div>
+            </div>
+
+            <!-- No Conflicts -->
+            <div class="no-conflicts" *ngIf="conflictingShifts.length === 0">
+              <svg class="no-conflicts-icon" width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <h3>Không có xung đột</h3>
+              <p>Ca làm việc này không bị xung đột với ca làm việc nào khác.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

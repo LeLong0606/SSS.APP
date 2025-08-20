@@ -1,0 +1,262 @@
+<div class="work-shift-form-container">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải dữ liệu...</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <div class="title-section">
+        <button 
+          class="btn btn-link btn-back"
+          (click)="onCancel()"
+          title="Quay lại danh sách">
+          <svg class="btn-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <div class="title-content">
+          <h1 class="page-title">{{ isEditMode ? 'Chỉnh sửa ca làm việc' : 'Tạo ca làm việc mới' }}</h1>
+          <p class="page-subtitle">
+            {{ isEditMode ? 'Cập nhật thông tin ca làm việc' : 'Tạo ca làm việc mới cho nhân viên' }}
+          </p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button 
+          class="btn btn-secondary"
+          (click)="onCancel()"
+          [disabled]="isSubmitting">
+          <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+          Hủy bỏ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Content -->
+  <div class="form-content" *ngIf="!isLoading">
+    <div class="form-card">
+      <form [formGroup]="workShiftForm" (ngSubmit)="onSubmit()" class="work-shift-form">
+        
+        <!-- Basic Information Section -->
+        <div class="form-section">
+          <h3 class="section-title">
+            <svg class="section-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+            Thông tin cơ bản
+          </h3>
+          
+          <div class="form-row">
+            <!-- Employee Selection -->
+            <div class="form-group col-md-6">
+              <label for="employeeCode" class="form-label">
+                Nhân viên <span class="required">*</span>
+              </label>
+              <select 
+                id="employeeCode"
+                formControlName="employeeCode"
+                class="form-select"
+                [class.is-invalid]="isFieldInvalid('employeeCode')"
+                (change)="checkShiftConflicts()">
+                <option value="">Chọn nhân viên</option>
+                <option *ngFor="let emp of employees" [value]="emp.employeeCode">
+                  {{ emp.fullName }} ({{ emp.employeeCode }})
+                </option>
+              </select>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('employeeCode')">
+                {{ getFieldError('employeeCode') }}
+              </div>
+            </div>
+
+            <!-- Work Location -->
+            <div class="form-group col-md-6">
+              <label for="workLocationId" class="form-label">
+                Địa điểm làm việc <span class="required">*</span>
+              </label>
+              <select 
+                id="workLocationId"
+                formControlName="workLocationId"
+                class="form-select"
+                [class.is-invalid]="isFieldInvalid('workLocationId')">
+                <option value="">Chọn địa điểm</option>
+                <option *ngFor="let location of workLocations" [value]="location.id">
+                  {{ location.name }} - {{ location.address }}
+                </option>
+              </select>
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('workLocationId')">
+                {{ getFieldError('workLocationId') }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Shift Date -->
+          <div class="form-group">
+            <label for="shiftDate" class="form-label">
+              Ngày làm việc <span class="required">*</span>
+            </label>
+            <input 
+              type="date" 
+              id="shiftDate"
+              formControlName="shiftDate"
+              class="form-control"
+              [class.is-invalid]="isFieldInvalid('shiftDate')"
+              (change)="checkShiftConflicts()">
+            <div class="invalid-feedback" *ngIf="isFieldInvalid('shiftDate')">
+              {{ getFieldError('shiftDate') }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Time Configuration Section -->
+        <div class="form-section">
+          <h3 class="section-title">
+            <svg class="section-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+            </svg>
+            Cấu hình thời gian
+          </h3>
+
+          <!-- Quick Time Presets -->
+          <div class="time-presets">
+            <label class="presets-label">Chọn nhanh ca làm việc:</label>
+            <div class="preset-buttons">
+              <button 
+                type="button"
+                class="btn btn-outline-secondary btn-sm preset-btn"
+                *ngFor="let preset of timePresets"
+                (click)="applyTimePreset(preset)">
+                {{ preset.label }}
+              </button>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <!-- Start Time -->
+            <div class="form-group col-md-6">
+              <label for="startTime" class="form-label">
+                Giờ bắt đầu <span class="required">*</span>
+              </label>
+              <input 
+                type="time" 
+                id="startTime"
+                formControlName="startTime"
+                class="form-control"
+                [class.is-invalid]="isFieldInvalid('startTime')"
+                (change)="checkShiftConflicts()">
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('startTime')">
+                {{ getFieldError('startTime') }}
+              </div>
+            </div>
+
+            <!-- End Time -->
+            <div class="form-group col-md-6">
+              <label for="endTime" class="form-label">
+                Giờ kết thúc <span class="required">*</span>
+              </label>
+              <input 
+                type="time" 
+                id="endTime"
+                formControlName="endTime"
+                class="form-control"
+                [class.is-invalid]="isFieldInvalid('endTime')"
+                (change)="checkShiftConflicts()">
+              <div class="invalid-feedback" *ngIf="isFieldInvalid('endTime')">
+                {{ getFieldError('endTime') }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Shift Duration Display -->
+          <div class="shift-info" *ngIf="getShiftDuration()">
+            <div class="info-item">
+              <svg class="info-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+              </svg>
+              <span class="info-label">Thời gian làm việc:</span>
+              <strong class="info-value">{{ getShiftDuration() }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modification Reason (Edit Mode Only) -->
+        <div class="form-section" *ngIf="isEditMode">
+          <h3 class="section-title">
+            <svg class="section-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+            Lý do thay đổi
+          </h3>
+          
+          <div class="form-group">
+            <label for="modificationReason" class="form-label">
+              Lý do thay đổi ca làm việc <span class="required">*</span>
+            </label>
+            <textarea 
+              id="modificationReason"
+              formControlName="modificationReason"
+              class="form-control"
+              [class.is-invalid]="isFieldInvalid('modificationReason')"
+              placeholder="Nhập lý do thay đổi ca làm việc..."
+              rows="3"></textarea>
+            <div class="invalid-feedback" *ngIf="isFieldInvalid('modificationReason')">
+              {{ getFieldError('modificationReason') }}
+            </div>
+            <small class="form-text text-muted">
+              Vui lòng ghi rõ lý do thay đổi để dễ dàng theo dõi và quản lý
+            </small>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <div class="action-buttons">
+            <button 
+              type="button" 
+              class="btn btn-secondary"
+              (click)="onCancel()"
+              [disabled]="isSubmitting">
+              <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+              Hủy bỏ
+            </button>
+            
+            <button 
+              type="button"
+              class="btn btn-outline-primary"
+              (click)="checkShiftConflicts()"
+              [disabled]="isSubmitting || workShiftForm.invalid">
+              <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              Kiểm tra xung đột
+            </button>
+            
+            <button 
+              type="submit" 
+              class="btn btn-primary"
+              [disabled]="workShiftForm.invalid || isSubmitting">
+              <svg class="btn-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24" *ngIf="!isSubmitting">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <div class="spinner-border spinner-border-sm" role="status" *ngIf="isSubmitting">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              {{ isSubmitting ? 'Đang xử lý...' : (isEditMode ? 'Cập nhật' : 'Tạo mới') }}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

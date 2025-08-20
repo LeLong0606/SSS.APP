@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: '/api',
+  apiUrl: 'https://localhost:5001/api',
   appName: 'SSS Employee Management',
   version: '1.0.0',
   defaultLanguage: 'vi',

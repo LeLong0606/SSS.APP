@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -18,6 +18,7 @@ using SSS.BE.Services.Security;
 using SSS.BE.Services.Database;
 using System.Text;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -84,8 +85,8 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"] ?? "SSS.BE.Users",
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero,
-        NameClaimType = JwtRegisteredClaimNames.Sub,
-        RoleClaimType = "role"
+        NameClaimType = ClaimTypes.NameIdentifier,
+        RoleClaimType = ClaimTypes.Role
     };
     
     options.Events = new JwtBearerEvents
@@ -106,7 +107,17 @@ builder.Services.AddAuthentication(options =>
 });
 
 // ===== Simple Role-Based Authorization =====
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // Policy tên "Administrator" cho các route chỉ Admin
+    options.AddPolicy("Administrator", p => p.RequireRole("Administrator"));
+
+    // Nếu có chỗ yêu cầu Admin hoặc Director
+    options.AddPolicy("AdminOrDirector", p => p.RequireRole("Administrator", "Director"));
+
+    // (tuỳ cần) nếu có nơi yêu cầu Admin/Director/TeamLeader
+    options.AddPolicy("AdminDirectorTeamLeader", p => p.RequireRole("Administrator", "Director", "TeamLeader"));
+});
 
 // ===== Register Infrastructure Services =====
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();

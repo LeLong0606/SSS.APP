@@ -1,10 +1,11 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SSS.BE.Services.ImageService;
 using SSS.BE.Models.Employee;
 using SSS.BE.Models.Image;
-using System.Security.Claims;
+using SSS.BE.Services.ImageService;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 
 namespace SSS.BE.Controllers;
 
@@ -13,7 +14,7 @@ namespace SSS.BE.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ImageController : ControllerBase
 {
     private readonly ILogger<ImageController> _logger;
