@@ -59,15 +59,37 @@ export class WorkShiftFormComponent implements OnInit, OnDestroy {
     }
   };
 
-  // Quick time presets
   timePresets = [
-    { label: 'Ca sáng (7:30 - 15:30)', start: '07:30', end: '15:30' },
-    { label: 'Ca chiều (14:00 - 22:00)', start: '14:00', end: '22:00' },
-    { label: 'Ca tối (21:00 - 05:00)', start: '21:00', end: '05:00' },
-    { label: 'Ca đêm (22:00 - 06:00)', start: '22:00', end: '06:00' },
-    { label: 'Ca cả ngày (8:00 - 17:00)', start: '08:00', end: '17:00' }
+    // Giờ cao điểm sáng
+    { label: 'Ca sáng cao điểm (06:00 - 08:00)', start: '06:00', end: '08:00' },
+  
+    // Ca hành chính, vận hành chung
+    { label: 'Ca tiêu chuẩn (07:30 - 15:30)', start: '07:30', end: '15:30' }, // ⚠️ Cập nhật tại đây
+    { label: 'Ca hành chính (07:30 - 17:00)', start: '07:30', end: '17:00' },
+    { label: 'Ca sáng đầy đủ (07:00 - 15:00)', start: '07:00', end: '15:00' },
+  
+    // Giờ cao điểm trưa
+    { label: 'Ca trưa cao điểm (11:00 - 13:30)', start: '11:00', end: '13:30' },
+  
+    // Ca xoay ca (chia đôi)
+    {
+      label: 'Ca ngắt quãng (07:00 - 12:00 & 17:00 - 21:00)',
+      start: '07:00',
+      end: '12:00',
+      extra: { start: '17:00', end: '21:00' }
+    },
+  
+    // Giờ cao điểm chiều tối
+    { label: 'Ca chiều cao điểm (16:30 - 21:00)', start: '16:30', end: '21:00' },
+  
+    // Ca tối mở rộng
+    { label: 'Ca tối dài (14:00 - 22:00)', start: '14:00', end: '22:00' },
+    { label: 'Ca chiều đầy đủ (13:00 - 21:00)', start: '13:00', end: '21:00' },
+  
+    // Ca sớm dành cho kho hoặc chuẩn bị
+    { label: 'Ca kho sớm (05:30 - 13:30)', start: '05:30', end: '13:30' }
   ];
-
+    
   constructor(
     private formBuilder: FormBuilder,
     private workShiftService: WorkShiftService,
